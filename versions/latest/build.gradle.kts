@@ -88,6 +88,16 @@ dependencies {
 
 	implementation("net.hypixel:mod-api:1.0.2")
 	include(implementation("maven.modrinth:hypixel-mod-api:1.0.2+build.1+mc26.1")!!)
+
+	testImplementation(platform("org.junit:junit-bom:5.13.4"))
+	testImplementation("org.junit.jupiter:junit-jupiter")
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+// Plain JUnit tests (src/test/kotlin) for logic that needs no game. They share the test
+// source set with the client gametests, which the JUnit engine does not pick up.
+tasks.test {
+	useJUnitPlatform()
 }
 
 tasks.processResources {
@@ -142,39 +152,5 @@ publishing {
 				create<BasicAuthentication>("basic")
 			}
 		}
-	}
-}
-
-afterEvaluate {
-	tasks.getByName("publishModrinth") {
-		dependsOn(rootProject.tasks.getByName("generateVersionChangelog"))
-	}
-	tasks.getByName("publishCurseforge") {
-		dependsOn(rootProject.tasks.getByName("generateVersionChangelog"))
-	}
-}
-
-publishMods {
-	file.set(tasks.jar.flatMap { it.archiveFile })
-	additionalFiles.from(tasks.sourcesJar.flatMap { it.archiveFile })
-	changelog.set(rootProject.layout.buildDirectory.file("changelog").map { it.asFile.readText() })
-	type.set(STABLE)
-	modLoaders.add("fabric")
-
-
-	modrinth {
-		accessToken.set(providers.environmentVariable("MODRINTH_TOKEN"))
-		projectId.set("p2rxzX0q")
-		minecraftVersions.set(listOf(minecraftVersion))
-		requires { slug = "fabric-api" }
-		embeds { slug = "axolotlclient-rendering" }
-	}
-
-	curseforge {
-		accessToken.set(providers.environmentVariable("CURSEFORGE_TOKEN"))
-		minecraftVersions.set(listOf(minecraftVersion))
-		projectId.set("809392")
-		requires { slug = "fabric-api" }
-		client = true
 	}
 }

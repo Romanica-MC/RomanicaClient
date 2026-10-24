@@ -3,7 +3,6 @@ import kotlin.io.path.*
 
 plugins {
 	id("io.freefair.lombok") version "9.2.0" apply false
-	id("me.modmuss50.mod-publish-plugin") version "2.0.0" apply false
 	id("com.gradleup.shadow") version "9.3.1" apply false
 	id("dev.yumi.gradle.licenser") version "2.0.+"
 	id("net.fabricmc.fabric-loom-remap") version "1.17.+" apply false
@@ -49,17 +48,12 @@ allprojects {
 		mavenCentral()
 		maven("https://central.sonatype.com/repository/maven-snapshots")
 	}
-
-	tasks.withType<AbstractTestTask>().configureEach {
-		failOnNoDiscoveredTests = false
-	}
 }
 
 subprojects {
 	apply(plugin = "java")
 	apply(plugin = "maven-publish")
 	apply(plugin = "io.freefair.lombok")
-	if (project.name != "common") apply(plugin = "me.modmuss50.mod-publish-plugin")
 	apply(plugin = "dev.yumi.gradle.licenser")
 
 	extensions.getByType(JavaPluginExtension::class).withSourcesJar()
@@ -137,31 +131,3 @@ subprojects {
 		}
 	}
 }
-
-tasks.register("generateVersionChangelog") {
-	actions.addLast {
-		val changelogText = project.layout.projectDirectory.file("CHANGELOG.md").asFile.readText()
-		val regexVersion =
-			((project.version) as String).split("+")[0].replace("\\.".toRegex(), "\\.").replace("\\+".toRegex(), "+")
-		val changelogRegex = "###? ${regexVersion}\\n\\n(( *- .+\\n)+)".toRegex()
-		val matcher = changelogRegex.find(changelogText)
-
-		val out = project.layout.buildDirectory.file("changelog").get().asFile.toPath()
-		if (matcher != null) {
-			var changelogContent = matcher.groups[1]?.value!!
-
-			val changelogLines = changelogText.split("\n")
-			val linkRefRegex = "^\\[([A-z0-9 _\\-/+.]+)]: ".toRegex()
-			for (line in changelogLines.reversed()) {
-				if ((linkRefRegex.matches(line)))
-					changelogContent += "\n" + line
-				else break
-			}
-
-			out.writeText(changelogContent)
-		} else {
-			out.writeText("")
-		}
-	}
-}
-

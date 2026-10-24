@@ -22,9 +22,11 @@
 
 package io.github.axolotlclient.modules.auth
 
+import java.util.Collections
 import java.util.Optional
 import java.util.WeakHashMap
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
 import java.util.function.Supplier
 
 import com.mojang.authlib.minecraft.UserApiService
@@ -71,8 +73,8 @@ class Auth : Accounts(), Module {
     private val viewAccounts = GenericOption("viewAccounts", "clickToOpen") {
         mc.gui.setScreen(AccountsScreen(mc.gui.screen()))
     }
-    private val loadingTexture: MutableSet<String> = HashSet()
-    private val textures: MutableMap<String, Identifier> = WeakHashMap()
+    private val loadingTexture: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    private val textures: MutableMap<String, Identifier> = Collections.synchronizedMap(WeakHashMap())
     val skinManager = SkinManager()
 
     override fun init() {
@@ -199,20 +201,31 @@ class Auth : Accounts(), Module {
         mc.execute(Runnable { mc.gui.setScreen(DeviceCodeDisplayScreen(mc.gui.screen(), data)) })
     }
 
+    // Every outcome ends in a cached texture: a lookup that found no skin (offline accounts,
+    // unknown UUIDs) used to leave nothing behind, so each frame that drew the head started a
+    // new session-server fetch.
     private fun loadTexture(uuid: String) {
-        if (!loadingTexture.contains(uuid)) {
-            loadingTexture.add(uuid)
-            ThreadExecuter.scheduleTask(Runnable {
-                val uUID = UUIDHelper.fromUndashed(uuid)
+        if (!loadingTexture.add(uuid)) return
+        ThreadExecuter.scheduleTask(Runnable {
+            val uUID = UUIDHelper.fromUndashed(uuid)
+            val fallback = DefaultPlayerSkin.get(uUID).body().texturePath()
+            val finish = { texture: Identifier ->
+                textures[uuid] = texture
+                loadingTexture.remove(uuid)
+            }
+            try {
                 val profileResult = mc.services().sessionService().fetchProfile(uUID, false)
-                if (profileResult != null) {
-                    mc.getSkinManager().get(profileResult.profile()).thenAccept { playerSkin ->
-                        playerSkin.ifPresent { skin -> textures[uuid] = skin.body().texturePath() }
+                if (profileResult == null) {
+                    finish(fallback)
+                } else {
+                    mc.getSkinManager().get(profileResult.profile()).whenComplete { playerSkin, _ ->
+                        finish(playerSkin?.map { it.body().texturePath() }?.orElse(null) ?: fallback)
                     }
                 }
-                loadingTexture.remove(uuid)
-            })
-        }
+            } catch (e: RuntimeException) {
+                finish(fallback)
+            }
+        })
     }
 
     fun getSkinTexture(account: Account): Identifier = getSkinTexture(account.uuid)

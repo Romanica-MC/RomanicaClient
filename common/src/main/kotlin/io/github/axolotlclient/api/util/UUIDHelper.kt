@@ -34,7 +34,8 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 object UUIDHelper {
-    private val CLIENT: HttpClient = NetworkUtil.createHttpClient()
+    // Lazy so the pure helpers (fromUndashed, toUndashed) work without the client bootstrapped.
+    private val CLIENT: HttpClient by lazy { NetworkUtil.createHttpClient() }
 
     @JvmField
     val USERNAME_TO_UUID: CachedAPI<String, String> =

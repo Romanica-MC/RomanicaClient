@@ -38,6 +38,7 @@ import io.github.axolotlclient.imperium.theme.ImperiumTheme as Theme
 import io.github.axolotlclient.modules.auth.Auth
 import io.github.axolotlclient.util.ThreadExecuter
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.gui.components.PlayerFaceExtractor
 import net.minecraft.client.gui.screens.ConfirmLinkScreen
 import net.minecraft.client.gui.screens.ConnectScreen
 import net.minecraft.client.gui.screens.TitleScreen
@@ -181,14 +182,15 @@ class ImperiumTitleScreen : TitleScreen(false) {
 		Theme.roundRect(graphics, x, y, w, ACCOUNT_H, lerpColor(Theme.OVERLAY_CONTROL, Theme.OVERLAY_CONTROL_HOVER, t), ACCOUNT_H / 2f)
 		Theme.roundOutline(graphics, x, y, w, ACCOUNT_H, lerpColor(Theme.OVERLAY_BORDER, Theme.OVERLAY_BORDER_HOVER, t), ACCOUNT_H / 2f)
 
-		// the player's head (default skin texture until the signed skin is loaded)
-		val uuid = try {
-			UUID.fromString(Auth.getInstance().getCurrent()?.uuid)
-		} catch (e: IllegalArgumentException) {
-			UUID(0L, 0L)
+		// the player's head: Auth serves the default skin for this UUID until the real one loads
+		val account = Auth.getInstance().getCurrent()
+		val uuid = AccountHead.uuidOf(account?.uuid)
+		val texture = if (account != null && uuid != null) {
+			Auth.getInstance().getSkinTexture(account)
+		} else {
+			DefaultPlayerSkin.get(UUID(0L, 0L)).body().texturePath()
 		}
-		val skin = DefaultPlayerSkin.get(uuid)
-		graphics.blit(RenderPipelines.GUI_TEXTURED, skin.body().texturePath(), x + 2, y + 1, 8f, 8f, HEAD, HEAD, 8, 8, 64, 64)
+		PlayerFaceExtractor.extractRenderState(graphics, texture, x + 2, y + 1, HEAD, true, false, -1)
 
 		graphics.text(font, ImperiumFonts.semibold(accountName()), x + HEAD + 5, y + 2, Theme.OVERLAY_TEXT, false)
 		graphics.text(font, ImperiumFonts.label(accountSubtitle()), x + HEAD + 5, y + 11, Theme.OVERLAY_TEXT_SECONDARY, false)
