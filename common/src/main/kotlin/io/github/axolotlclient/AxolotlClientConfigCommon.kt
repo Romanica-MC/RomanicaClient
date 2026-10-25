@@ -481,8 +481,6 @@ abstract class AxolotlClientConfigCommon {
     @JvmField
     val creditsBGM = BooleanOption("creditsBGM", true)
     @JvmField
-    val modifyClientBrand = BooleanOption("modify_client_brand", true)
-    @JvmField
     val debugLogOutput = BooleanOption("debugLogOutput", false)
 
     @JvmField
@@ -627,7 +625,7 @@ abstract class AxolotlClientConfigCommon {
         performance.add(disableTntExpansion, optimizeSpawners, disableEnchantTableBooks)
         config.add(performance)
 
-        hidden.add(creditsBGM, someNiceBackground, modifyClientBrand, noAltIcons)
+        hidden.add(creditsBGM, someNiceBackground, noAltIcons)
 
         AxoKeybinding.create(AxoKeys.KEY_UNKNOWN, "toggle_hide_chat").`br$registerOnConsumeClick`(Runnable {
             hideChat.toggle()
