@@ -48,7 +48,7 @@ public class TranslationsParityGameTest implements FabricClientGameTest {
 
 	private static final String LANG_PATH = "assets/axolotlclient/lang/";
 
-	// fr_fr predates the other locales and is deliberately partial; it obeys the same rule.
+	// fr_fr now ships only from common (upstream's partial French); it obeys the same rule.
 	private static final String[] LOCALES = {"pt_br", "de_de", "es_es", "fr_fr"};
 
 	@Override

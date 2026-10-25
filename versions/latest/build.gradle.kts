@@ -98,6 +98,12 @@ dependencies {
 // source set with the client gametests, which the JUnit engine does not pick up.
 tasks.test {
 	useJUnitPlatform()
+	val langDir = file("src/main/resources/assets/axolotlclient/lang")
+	val commonLangDir = rootProject.file("common/src/main/resources/assets/axolotlclient/lang")
+	inputs.dir(langDir)
+	inputs.dir(commonLangDir)
+	systemProperty("romanica.langDir", langDir.absolutePath)
+	systemProperty("romanica.commonLangDir", commonLangDir.absolutePath)
 }
 
 tasks.processResources {
