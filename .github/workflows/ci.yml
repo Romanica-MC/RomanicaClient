@@ -37,6 +37,38 @@ jobs:
           name: RomanicaClient-jar
           path: versions/latest/build/libs/*.jar
 
+  # Sign-in tokens are sealed with Windows DPAPI (TokenVault). Only a Windows runner
+  # can prove the seal really happens and opens again; on Linux those tests are skipped.
+  windows-token-storage:
+    name: Token storage (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Token storage tests
+        shell: bash
+        run: ./gradlew :latest:test --tests "*AccountsTokenStorageTest*" --tests "*AccountClientIdTest*"
+
+      - name: Fail if the DPAPI tests did not run
+        shell: bash
+        run: |
+          f=versions/latest/build/test-results/test/TEST-io.github.axolotlclient.modules.auth.AccountsTokenStorageTest.xml
+          test -f "$f" || { echo "no test report"; exit 1; }
+          grep -o 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' "$f"
+          grep -q 'testcase name="windowsFileHoldsNoReadableToken"' "$f"
+          if grep -A1 'testcase name="windows' "$f" | grep -q '<skipped'; then echo "DPAPI tests were skipped"; exit 1; fi
+
   # The client gametest spins a real Minecraft client. GitHub's ubuntu runners
   # have no GPU, so this runs under xvfb with mesa's software GL (llvmpipe),
   # which renders roughly 20x slower than a real GPU: the full suite needs
