@@ -20,28 +20,33 @@
  * For more information, see the LICENSE file.
  */
 
-package io.github.axolotlclient.mixin;
+package io.github.axolotlclient.mixin
 
-import io.github.axolotlclient.util.ChatPeek;
-import net.minecraft.client.multiplayer.chat.GuiMessage;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import io.github.axolotlclient.util.ChatPeek
+import net.minecraft.client.multiplayer.chat.GuiMessage
+import org.spongepowered.asm.mixin.Mixin
+import org.spongepowered.asm.mixin.injection.At
+import org.spongepowered.asm.mixin.injection.Inject
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable
 
 /**
  * Chat peek (Alpine parity), fade half: the background chat pass computes each line's fade alpha
  * from its age here. While the peek key is held, every line is treated as fully visible so the
  * whole history shows — including messages that already faded out — without opening the chat
- * screen. The height half of peek lives in {@link ChatHudMixin} ({@code getHeight}).
+ * screen. The height half of peek lives in [ChatHudMixin] (`getHeight`).
  */
-@Mixin(targets = "net.minecraft.client.gui.components.ChatComponent$AlphaCalculator")
-public interface ChatAlphaCalculatorMixin {
+// abstract class instead of Java's interface: interface companion objects cannot host the
+// private @JvmStatic static handler this mixin needs.
+@Mixin(targets = ["net.minecraft.client.gui.components.ChatComponent\$AlphaCalculator"])
+abstract class ChatAlphaCalculatorMixin {
 
-	@Inject(method = "lambda$timeBased$0", at = @At("HEAD"), cancellable = true)
-	private static void axolotlclient$peekNoFade(int tick, GuiMessage.Line line, CallbackInfoReturnable<Float> cir) {
-		if (ChatPeek.isActive()) {
-			cir.setReturnValue(1.0F);
-		}
-	}
+    companion object {
+        @JvmStatic
+        @Inject(method = ["lambda\$timeBased\$0"], at = [At("HEAD")], cancellable = true)
+        private fun `axolotlclient$peekNoFade`(tick: Int, line: GuiMessage.Line, cir: CallbackInfoReturnable<Float>) {
+            if (ChatPeek.isActive()) {
+                cir.setReturnValue(1.0f)
+            }
+        }
+    }
 }

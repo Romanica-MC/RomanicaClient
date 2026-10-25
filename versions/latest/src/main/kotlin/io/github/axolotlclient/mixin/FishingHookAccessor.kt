@@ -20,25 +20,26 @@
  * For more information, see the LICENSE file.
  */
 
-package io.github.axolotlclient.mixin;
+package io.github.axolotlclient.mixin
 
-import net.minecraft.network.syncher.EntityDataAccessor;
-import net.minecraft.world.entity.projectile.FishingHook;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.gen.Accessor;
+import net.minecraft.network.syncher.EntityDataAccessor
+import net.minecraft.world.entity.projectile.FishingHook
+import org.spongepowered.asm.mixin.Mixin
+import org.spongepowered.asm.mixin.gen.Accessor
 
 /**
- * Exposes the bobber's synced bite flag. The server sets {@code DATA_BITING} when a fish
+ * Exposes the bobber's synced bite flag. The server sets `DATA_BITING` when a fish
  * bites and clears it when it escapes; the same update is what makes the vanilla client's
- * bobber dip ({@code FishingHook#onSyncedDataUpdated}). That synced flag is the only
+ * bobber dip (`FishingHook#onSyncedDataUpdated`). That synced flag is the only
  * bite signal the client ever sees — there is no dedicated packet or sound for it — so
- * auto-fish polls it from {@code AutoFish.tick()}.
+ * auto-fish polls it from `AutoFish.tick()`.
  */
-@Mixin(FishingHook.class)
-public interface FishingHookAccessor {
+@Mixin(FishingHook::class)
+interface FishingHookAccessor {
 
-	@Accessor("DATA_BITING")
-	static EntityDataAccessor<Boolean> axolotlclient$dataBiting() {
-		throw new AssertionError();
-	}
+    companion object {
+        @JvmStatic
+        @Accessor("DATA_BITING")
+        fun `axolotlclient$dataBiting`(): EntityDataAccessor<Boolean> = throw AssertionError()
+    }
 }

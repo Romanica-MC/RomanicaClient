@@ -20,17 +20,18 @@
  * For more information, see the LICENSE file.
  */
 
-package io.github.axolotlclient.mixin.skins;
+package io.github.axolotlclient.mixin.skins
 
-import com.mojang.blaze3d.platform.NativeImage;
-import net.minecraft.client.renderer.texture.SkinTextureDownloader;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.gen.Invoker;
+import com.mojang.blaze3d.platform.NativeImage
+import net.minecraft.client.renderer.texture.SkinTextureDownloader
+import org.spongepowered.asm.mixin.Mixin
+import org.spongepowered.asm.mixin.gen.Invoker
 
-@Mixin(SkinTextureDownloader.class)
-public interface SkinTextureDownloaderAccessor {
-	@Invoker("processLegacySkin")
-	static NativeImage invokeProcessLegacySkin(NativeImage img, String url) {
-		throw new UnsupportedOperationException();
-	}
+@Mixin(SkinTextureDownloader::class)
+interface SkinTextureDownloaderAccessor {
+    companion object {
+        @JvmStatic
+        @Invoker("processLegacySkin")
+        fun invokeProcessLegacySkin(img: NativeImage, url: String): NativeImage = throw UnsupportedOperationException()
+    }
 }
