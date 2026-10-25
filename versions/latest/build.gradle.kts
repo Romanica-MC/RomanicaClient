@@ -47,6 +47,12 @@ loom {
 			if (project.hasProperty("imperium.fastGametests")) {
 				vmArg("-Dimperiumclient.gametest.subset=ci")
 			}
+			// Opt-in benchmark subset (same seam as the ci one): -Pimperium.benchmarkGametests
+			// runs only the uncapped-frame PerformanceBenchmarkGameTest. Slow by design and
+			// never a release gate.
+			if (project.hasProperty("imperium.benchmarkGametests")) {
+				vmArg("-Dimperiumclient.gametest.subset=benchmark")
+			}
 		}
 	}
 	decompilers {

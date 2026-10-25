@@ -52,9 +52,10 @@ import kotlin.math.floor
  *
  * Updates are incremental: the grid is anchored to a zoom-quantised world position, so
  * walking shifts the existing content (array copies, no re-sampling) and only the exposed
- * edge strips are sampled. Chunk loads mark their grid region dirty, and a periodic
- * full-grid rescan (every [RESCAN_INTERVAL_TICKS]) picks up block changes within
- * that delay. Sampling is budgeted per tick so a full grid fill never hitches a frame.
+ * edge strips are sampled. Chunk loads mark their grid region dirty, and a continuous
+ * low-budget rolling sweep (at most [SWEEP_BUDGET] columns per tick, cursor-based) re-samples
+ * the whole grid over a few seconds, picking up block changes within that delay. Sampling is
+ * budgeted per tick so a full grid fill never hitches a frame.
  */
 class MinimapTexture {
 
@@ -81,7 +82,8 @@ class MinimapTexture {
 	private var heights = IntArray(0)
 	private var dirty = BooleanArray(0)
 	private var allDirty = true
-	private var rescanCounter = 0
+	private var sweepCursor = 0
+	private var sweepCompletions = 0L
 	private var version = 0
 
 	var texture: DynamicTexture? = null
@@ -180,19 +182,18 @@ class MinimapTexture {
 		}
 		recenter(playerX, playerZ)
 
-		if (--rescanCounter <= 0) {
-			rescanCounter = RESCAN_INTERVAL_TICKS
-			markAllDirty()
-		}
-
-		var budget = SAMPLE_BUDGET
+		// A full invalidation (first fill, teleport, zoom change) still spends the large
+		// budget so the map fills quickly; the steady-state refresh is the rolling sweep
+		// below, which costs a flat, tiny slice per tick instead of a rescan burst.
+		var budget = if (allDirty) SAMPLE_BUDGET else SWEEP_BUDGET
 		var wrote = false
 		if (allDirty) {
-			// Keep the old colours visible while the resample runs, so periodic rescans
+			// Keep the old colours visible while the resample runs, so invalidations
 			// don't blank the map; only teleports/zoom changes clear via reset()/big shifts.
 			dirty.fill(true)
 			allDirty = false
 		}
+		// Pass 1: explicitly dirty texels first (chunk loads, exposed edge strips).
 		for (t in dirty.indices) {
 			if (budget <= 0) {
 				break
@@ -201,6 +202,27 @@ class MinimapTexture {
 				continue
 			}
 			dirty[t] = false
+			budget--
+			val x = t % gridSize
+			val z = t / gridSize
+			val color = sampleColumn(x, z)
+			colors[t] = color
+			image!!.setPixel(x, z, color)
+			wrote = true
+		}
+		// Pass 2: rolling sweep with whatever budget is left — every tick re-samples a
+		// slice starting at the cursor, wrapping around, so the whole grid refreshes over
+		// gridSize^2 / SWEEP_BUDGET ticks (a few seconds) without ever pausing a frame.
+		while (budget > 0 && gridSize > 0) {
+			val t = sweepCursor
+			sweepCursor++
+			if (sweepCursor >= colors.size) {
+				sweepCursor = 0
+				sweepCompletions++
+			}
+			if (dirty[t]) {
+				dirty[t] = false
+			}
 			budget--
 			val x = t % gridSize
 			val z = t / gridSize
@@ -389,12 +411,24 @@ class MinimapTexture {
 	/** True while any texel still awaits its first sample after a fill/reset. */
 	fun hasPendingWork(): Boolean = allDirty || dirty.any { it }
 
+	/**
+	 * How many times the rolling sweep has wrapped past the end of the grid. Exposed for the
+	 * benchmark/tests: a value above zero proves the sweep refreshes texels even when
+	 * nothing marks them dirty.
+	 */
+	fun sweepCompletions(): Long = sweepCompletions
+
 	companion object {
 		/** Columns sampled per tick at most; a 192x192 grid fills in ~5 ticks. */
 		private const val SAMPLE_BUDGET = 8192
 
-		/** Full-grid rescan cadence: catches block changes within loaded chunks. */
-		private const val RESCAN_INTERVAL_TICKS = 40
+		/**
+		 * Columns the rolling refresh sweep samples per tick. Chosen so a 128x128 grid (the
+		 * default map) fully refreshes in 32 ticks and a 192x192 grid (rotated square) in 72
+		 * ticks — comparable staleness to the old 40-tick full rescan — while the per-tick
+		 * cost stays flat and tiny instead of arriving as a multi-millisecond burst.
+		 */
+		private const val SWEEP_BUDGET = 512
 		private const val MAX_WATER_DEPTH_SHADE = 8
 
 

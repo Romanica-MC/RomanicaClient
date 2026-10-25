@@ -95,8 +95,9 @@ class HudManager : HudManagerCommon() {
             // hud_frame_limit: cacheable entries (see HudEntry.dynamicContent) re-record at
             // most N times per second and are re-submitted from the recording in between;
             // dynamic entries always render live. Mirrors HudManagerCommon.render's z-sorted
-            // loop, partitioned so the cache can wrap each cacheable entry's render.
-            val ordered = getEntries()
+            // loop, partitioned so the cache can wrap each cacheable entry's render. The
+            // ordered list is the reusable scratch (no per-frame copy allocation).
+            val ordered = fillRenderOrder()
             ordered.sortWith(Comparator.comparingInt { obj: HudEntry -> obj.getZLevel() })
             HudFrameCache.render(context, delta, ordered)
         }

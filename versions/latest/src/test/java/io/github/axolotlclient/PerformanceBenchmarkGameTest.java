@@ -36,6 +36,9 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import io.github.axolotlclient.bridge.util.AxoIdentifier;
+import io.github.axolotlclient.imperium.menu.ImperiumMenuScreen;
+import io.github.axolotlclient.modules.minimap.MinimapHud;
+import io.github.axolotlclient.modules.minimap.MinimapTexture;
 import io.github.axolotlclient.modules.hud.HudManager;
 import io.github.axolotlclient.util.FrameTimeSampler;
 import io.github.axolotlclient.util.HudFrameCache;
@@ -114,6 +117,10 @@ public class PerformanceBenchmarkGameTest implements FabricClientGameTest {
 				benchDisableTntExpansion(context, world);
 				benchOptimizeSpawners(context, world);
 				benchDisableEnchantTableBooks(context, world);
+				benchMinimap(context, world);
+				benchHudTree(context, world);
+				benchMenuScreen(context, world);
+				benchChat(context, world);
 			} finally {
 				setFpsOptions(context, vsync, framerateLimit);
 				FrameTimeSampler.clear();
@@ -136,6 +143,14 @@ public class PerformanceBenchmarkGameTest implements FabricClientGameTest {
 			AxolotlClient.config().disableTntExpansion.set(false);
 			AxolotlClient.config().optimizeSpawners.set(false);
 			AxolotlClient.config().disableEnchantTableBooks.set(false);
+			AxolotlClient.config().smoothChat.set(false);
+			if (mc.gui.screen() != null) {
+				mc.gui.setScreen(null);
+			}
+			for (String[] hud : TREE_HUDS) {
+				setHudEnabled(hud[0], hud[1], false);
+			}
+			setHudEnabled("imperiumclient", "minimaphud", false);
 		});
 		HudFrameCache.resetCounters();
 		PerformanceStats.reset();
@@ -395,6 +410,137 @@ public class PerformanceBenchmarkGameTest implements FabricClientGameTest {
 		record(context, "disable_enchant_table_books", off, on, "16 enchanting tables in a 2-block ring (books open)");
 	}
 
+	// --- hot-spot scenes (issue #22 pass: render-thread work the shipped-feature scenes
+	// do not cover) ---
+
+	/** The HUD-heavy "default config" set the hud_tree scene renders (confirmed entry ids). */
+	private static final String[][] TREE_HUDS = {
+		{"kronhud", "fpshud"}, {"kronhud", "cpshud"}, {"kronhud", "pinghud"}, {"kronhud", "tpshud"},
+		{"kronhud", "coordshud"}, {"kronhud", "compasshud"}, {"kronhud", "armorhud"},
+		{"kronhud", "potionshud"}, {"kronhud", "togglesprint"}, {"kronhud", "iphud"},
+		{"kronhud", "speedhud"}, {"kronhud", "arrowhud"}, {"kronhud", "itemupdatehud"},
+		{"kronhud", "irltimehud"}, {"kronhud", "reachhud"}, {"kronhud", "combohud"},
+		{"kronhud", "mousemovementhud"}, {"kronhud", "playerhud"},
+		{"axolotlclient", "inventoryhud"}, {"axolotlclient", "iconhud"},
+		{"imperiumclient", "obsidiancounthud"}, {"imperiumclient", "playtimehud"}
+	};
+
+	/**
+	 * minimap_hud: the chunk-colour minimap with its grid sampled and re-uploaded from the
+	 * client tick. Measured over tick windows (several seconds) rather than a fixed frame
+	 * count, because the cost pattern is periodic work on the tick thread — a full-grid
+	 * re-sample burst — which a short frame window can miss entirely. P95 and especially the
+	 * max frame time carry the signal; the average mostly measures the blit.
+	 */
+	private void benchMinimap(ClientGameTestContext context, TestSingleplayerContext world) {
+		prepareScene(context, world, 5);
+		context.runOnClient(mc -> setHudEnabled("imperiumclient", "minimaphud", false));
+		context.waitTicks(40);
+
+		Stats off = measureTicks(context, "minimap_hud", "off", () ->
+			context.runOnClient(mc -> setHudEnabled("imperiumclient", "minimaphud", false)), 20, 100);
+
+		context.runOnClient(mc -> setHudEnabled("imperiumclient", "minimaphud", true));
+		// Fill the grid before measuring: the initial full fill after enable is a one-time
+		// cost, the periodic refresh is the recurring one being measured.
+		context.waitTicks(80);
+		long sweepsBefore = context.computeOnClient(mc -> minimapTexture(mc).sweepCompletions());
+		int texels = context.computeOnClient(mc -> minimapTexture(mc).sampledTexels());
+		check(texels > 0, "the minimap grid should have sampled columns, got " + texels);
+		Stats on = measureTicks(context, "minimap_hud", "on", () -> {}, 20, 100);
+		long sweepsAfter = context.computeOnClient(mc -> minimapTexture(mc).sweepCompletions());
+		// The rolling sweep is the steady-state refresh: with nothing marking texels dirty,
+		// it must still have wrapped the whole grid at least once in a 120-tick window.
+		check(sweepsAfter > sweepsBefore,
+			"the rolling refresh sweep must keep re-sampling the grid while enabled (completions "
+				+ sweepsBefore + " -> " + sweepsAfter + ")");
+		record(context, "minimap_hud", off, on, "128px square minimap, static player, 120-tick windows");
+
+		context.runOnClient(mc -> setHudEnabled("imperiumclient", "minimaphud", false));
+	}
+
+	private static MinimapTexture minimapTexture(Minecraft mc) {
+		var entry = HudManager.getInstance().get(AxoIdentifier.of("imperiumclient", "minimaphud"));
+		check(entry instanceof MinimapHud, "minimap entry should be a MinimapHud");
+		return ((MinimapHud) entry).getTexture();
+	}
+
+	/**
+	 * hud_tree: our whole HUD render pass with a HUD-heavy enabled set (22 entries), versus
+	 * the global hud.enabled toggle off. The delta is the mod's own HUD cost per frame —
+	 * the frame loop, the entry list handling, and every enabled entry's render.
+	 */
+	private void benchHudTree(ClientGameTestContext context, TestSingleplayerContext world) {
+		prepareScene(context, world, 6);
+		context.runOnClient(mc -> {
+			for (String[] hud : TREE_HUDS) {
+				setHudEnabled(hud[0], hud[1], true);
+			}
+		});
+		world.getServer().runCommand("item replace entity @s armor.head with diamond_helmet");
+		world.getServer().runCommand("item replace entity @s armor.chest with diamond_chestplate");
+		world.getServer().runCommand("item replace entity @s armor.legs with diamond_leggings");
+		world.getServer().runCommand("item replace entity @s armor.feet with diamond_boots");
+		world.getServer().runCommand("give @s diamond 64");
+		context.waitTicks(20);
+
+		Stats off = measure(context, "hud_tree", "off", () -> context.runOnClient(mc ->
+			HudManager.getInstance().setHudsEnabled(false)));
+		Stats on = measure(context, "hud_tree", "on", () -> context.runOnClient(mc ->
+			HudManager.getInstance().setHudsEnabled(true)));
+		record(context, "hud_tree", off, on, "22 HUD entries enabled (text readouts + item HUDs)");
+
+		context.runOnClient(mc -> {
+			HudManager.getInstance().setHudsEnabled(true);
+			for (String[] hud : TREE_HUDS) {
+				setHudEnabled(hud[0], hud[1], false);
+			}
+		});
+	}
+
+	/**
+	 * menu_screen: the Imperium menu open over the world versus no screen. The delta is the
+	 * menu's own per-frame render cost (sidebar, category chips, card grid, header) on top
+	 * of the world render.
+	 */
+	private void benchMenuScreen(ClientGameTestContext context, TestSingleplayerContext world) {
+		prepareScene(context, world, 7);
+
+		Stats off = measure(context, "menu_screen", "off", () -> context.runOnClient(mc -> {
+			if (mc.gui.screen() != null) {
+				mc.gui.setScreen(null);
+			}
+		}));
+		Stats on = measure(context, "menu_screen", "on", () -> context.runOnClient(mc ->
+			mc.gui.setScreen(new ImperiumMenuScreen(null))));
+		boolean stillOpen = context.computeOnClient(mc -> mc.gui.screen() instanceof ImperiumMenuScreen);
+		check(stillOpen, "the menu screen must still be open after the measured window");
+		context.runOnClient(mc -> mc.gui.setScreen(null));
+		record(context, "menu_screen", off, on, "Imperium menu (v3 theme) open over the world");
+	}
+
+	/**
+	 * chat_hud: chat history filled and visible, smooth chat off versus on. Bounds the
+	 * ChatHudMixin per-frame wrap cost; in steady state (no animation in flight) the
+	 * expected delta is inside the noise band — the number exists so "noise" is a measured
+	 * claim, not an assumption.
+	 */
+	private void benchChat(ClientGameTestContext context, TestSingleplayerContext world) {
+		prepareScene(context, world, 8);
+		List<String> commands = new ArrayList<>();
+		for (int i = 0; i < 40; i++) {
+			commands.add("tellraw @s {\"text\":\"benchmark chat line " + i + "\",\"color\":\"white\"}");
+		}
+		runCommands(world, commands);
+		context.waitTicks(20);
+
+		Stats off = measure(context, "chat_hud", "off", () -> context.runOnClient(mc ->
+			AxolotlClient.config().smoothChat.set(false)));
+		Stats on = measure(context, "chat_hud", "on", () -> context.runOnClient(mc ->
+			AxolotlClient.config().smoothChat.set(true)));
+		record(context, "chat_hud", off, on, "40 message history visible, no animation in flight");
+	}
+
 	// --- helpers ---
 
 	private static String pos(BlockPos pos) {
@@ -481,6 +627,37 @@ public class PerformanceBenchmarkGameTest implements FabricClientGameTest {
 		return new Stats(millis);
 	}
 
+	/**
+	 * Tick-windowed variant of {@link #measure} for cost that lives on the client tick
+	 * (periodic sampling bursts, timers): collects frames across a wall-clock window of
+	 * game ticks instead of a fixed frame count, so periodic spikes always land inside the
+	 * measured span. The first {@code warmupTicks} are discarded; the frame stats cover the
+	 * following {@code measureTicks} window.
+	 */
+	private Stats measureTicks(ClientGameTestContext context, String feature, String phase, Runnable applySetup,
+							   int warmupTicks, int measureTicks) {
+		List<Long> samples = Collections.synchronizedList(new ArrayList<>());
+		FrameTimeSampler.install(samples::add);
+		applySetup.run();
+		final int slice = 5;
+		int totalSlices = (warmupTicks + measureTicks) / slice;
+		int warmupSlices = warmupTicks / slice;
+		int[] marks = new int[totalSlices + 1];
+		long deadline = System.nanoTime() + PHASE_TIMEOUT_NANOS;
+		for (int i = 1; i <= totalSlices; i++) {
+			context.waitTicks(slice);
+			marks[i] = samples.size();
+			check(System.nanoTime() <= deadline || marks[i] > marks[i - 1],
+				feature + "/" + phase + ": frames stopped arriving — rendering is not alive");
+		}
+		FrameTimeSampler.clear();
+		check(marks[totalSlices] > marks[warmupSlices],
+			feature + "/" + phase + ": no frames measured across " + measureTicks + " ticks");
+		List<Long> measured = new ArrayList<>(samples.subList(marks[warmupSlices], marks[totalSlices]));
+		double[] millis = measured.stream().mapToDouble(ns -> ns / 1_000_000.0).sorted().toArray();
+		return new Stats(millis);
+	}
+
 	private void record(ClientGameTestContext context, String feature, Stats off, Stats on, String scene) {
 		int fps = context.computeOnClient(Minecraft::getFps);
 		check(fps > 0, "the client must still report a live FPS after " + feature);
@@ -491,10 +668,12 @@ public class PerformanceBenchmarkGameTest implements FabricClientGameTest {
 		JsonObject offJson = new JsonObject();
 		offJson.addProperty("avg_ms", round(off.avg));
 		offJson.addProperty("p95_ms", round(off.p95));
+		offJson.addProperty("max_ms", round(off.max));
 		offJson.addProperty("fps_avg", round(1000.0 / off.avg));
 		JsonObject onJson = new JsonObject();
 		onJson.addProperty("avg_ms", round(on.avg));
 		onJson.addProperty("p95_ms", round(on.p95));
+		onJson.addProperty("max_ms", round(on.max));
 		onJson.addProperty("fps_avg", round(1000.0 / on.avg));
 		line.add("off", offJson);
 		line.add("on", onJson);
@@ -519,6 +698,7 @@ public class PerformanceBenchmarkGameTest implements FabricClientGameTest {
 	private static final class Stats {
 		final double avg;
 		final double p95;
+		final double max;
 
 		Stats(double[] sortedMillis) {
 			double sum = 0;
@@ -528,6 +708,7 @@ public class PerformanceBenchmarkGameTest implements FabricClientGameTest {
 			}
 			this.avg = sum / sortedMillis.length;
 			this.p95 = sortedMillis[(int) Math.min(sortedMillis.length - 1, Math.floor(sortedMillis.length * 0.95))];
+			this.max = sortedMillis[sortedMillis.length - 1];
 		}
 	}
 }

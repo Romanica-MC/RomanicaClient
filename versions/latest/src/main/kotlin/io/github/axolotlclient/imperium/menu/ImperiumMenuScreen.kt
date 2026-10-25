@@ -110,6 +110,21 @@ class ImperiumMenuScreen(private val parent: Screen?) :
 	/** x/y of each segment chip, indexed by [MenuCategory] ordinal. */
 	private var segmentPos = arrayOfNulls<IntArray>(0)
 
+	// Cached per-frame text: category chip labels/widths and the header strings are
+	// translation lookups + allocations that used to run every frame (once per chip for
+	// the labels). Rebuilt on layout (init/resize) and when the settings panel toggles,
+	// which are the only things that change them.
+	private var segmentLabelsCache: List<String> = emptyList()
+	private var segmentWidthCache = IntArray(0)
+	private var headerCacheW = -1
+	private var headerTitleTrunc = ""
+	private var headerDescriptionTrunc = ""
+
+	// The enabled-count badge: the count is cheap to recompute, the translatable format
+	// is not, so only the string rebuilds when the count actually changes.
+	private var enabledBadgeCount = -1
+	private var enabledBadgeText = ""
+
 	// v3 motion state: the sliding nav pill, per-card hover fades and per-control press fades.
 	private var pillFromY = 0f
 	private var pillY = 0f
@@ -266,7 +281,11 @@ class ImperiumMenuScreen(private val parent: Screen?) :
 	/** Packs the category chips into centred rows that fit the content column. */
 	private fun layoutV3Segments() {
 		val labels = segmentLabels()
-		val widths = labels.map { segmentWidth(labels.indexOf(it)) + V3_SEG_PAD * 2 }
+		// Cache the RAW label widths (what segmentWidth callers add the chip padding to);
+		// the row packing below works on the padded widths.
+		segmentLabelsCache = labels
+		segmentWidthCache = IntArray(labels.size) { ImperiumFonts.width(font, labels[it], ImperiumFonts.BARLOW_SEMIBOLD) }
+		val widths = segmentWidthCache.map { it + V3_SEG_PAD * 2 }
 		val maxRowW = contentW()
 		val pos = arrayOfNulls<IntArray>(labels.size)
 		var row = 0
@@ -294,9 +313,22 @@ class ImperiumMenuScreen(private val parent: Screen?) :
 	private fun segmentLabels(): List<String> =
 		MenuCategory.entries.map { c: MenuCategory -> Component.translatable(c.translationKey()).string }
 
-	/** A segment chip's label width in the UI font (the chips render in Barlow SemiBold). */
-	private fun segmentWidth(index: Int): Int =
-		ImperiumFonts.width(font, segmentLabels()[index], ImperiumFonts.BARLOW_SEMIBOLD)
+	/**
+	 * A segment chip's label width in the UI font (the chips render in Barlow SemiBold).
+	 * Reads the layout-time cache — building it per call re-translated every label. The
+	 * lazy fill only covers a theme flip landing without an init pass; normally
+	 * layoutV3Segments ran in init.
+	 */
+	private fun segmentWidth(index: Int): Int {
+		ensureSegmentCache()
+		return segmentWidthCache[index]
+	}
+
+	private fun ensureSegmentCache() {
+		if (segmentLabelsCache.isEmpty()) {
+			layoutV3Segments()
+		}
+	}
 
 	private fun searchX(): Int = width - V3_CONTENT_PAD - V3_SEARCH_W
 
@@ -500,6 +532,7 @@ class ImperiumMenuScreen(private val parent: Screen?) :
 		// A previously focused option widget is about to be discarded.
 		clearFocus()
 		settingsEntry = entry
+		headerCacheW = -1 // the header switches to the module name; rebuild the cache
 		settingsScroll = 0.0
 		buildSettingsRows(entry.settings())
 		addSettingsWidgets()
@@ -512,6 +545,7 @@ class ImperiumMenuScreen(private val parent: Screen?) :
 		if (settingsEntry == null) return
 		stripSettingsWidgets()
 		settingsEntry = null
+		headerCacheW = -1 // the header switches back to the menu title; rebuild the cache
 		settingsScroll = 0.0
 		addRenderableWidget(search)
 		setInitialFocus(search)
@@ -1135,28 +1169,36 @@ class ImperiumMenuScreen(private val parent: Screen?) :
 	}
 
 	private fun extractHeaderV3(graphics: GuiGraphicsExtractor) {
-		val title: String
-		val description: String
-		if (settingsEntry != null) {
-			title = settingsEntry!!.name()
-			description = Component.translatable(settingsEntry!!.category().translationKey()).string
-		} else {
-			title = Component.translatable("imperium.menu.header.title").string
-			description = Component.translatable("imperium.menu.header.description").string
-		}
 		// the header column squeezes on very small windows (GUI scale 3 on an 854x480 frame):
 		// both lines truncate to the space between the sidebar and the search pill.
 		val headerRight = if (settingsEntry == null) searchX() - 6 else width - V3_CONTENT_PAD
 		val headerW = headerRight - (V3_SIDEBAR_W + V3_CONTENT_PAD)
-		val titleText = ImperiumFonts.truncate(font, title, headerW, ImperiumFonts.BARLOW_SEMIBOLD)
-		val descriptionText = ImperiumFonts.truncate(font, description, headerW)
-		graphics.text(font, ImperiumFonts.semibold(titleText), V3_SIDEBAR_W + V3_CONTENT_PAD, V3_HEADER_Y, Theme.TEXT, false)
-		graphics.text(font, ImperiumFonts.label(descriptionText), V3_SIDEBAR_W + V3_CONTENT_PAD, V3_HEADER_Y + 11, Theme.TEXT_SECONDARY, false)
+		if (headerW != headerCacheW) {
+			headerCacheW = headerW
+			val title: String
+			val description: String
+			if (settingsEntry != null) {
+				title = settingsEntry!!.name()
+				description = Component.translatable(settingsEntry!!.category().translationKey()).string
+			} else {
+				title = Component.translatable("imperium.menu.header.title").string
+				description = Component.translatable("imperium.menu.header.description").string
+			}
+			headerTitleTrunc = ImperiumFonts.truncate(font, title, headerW, ImperiumFonts.BARLOW_SEMIBOLD)
+			headerDescriptionTrunc = ImperiumFonts.truncate(font, description, headerW)
+		}
+		graphics.text(font, ImperiumFonts.semibold(headerTitleTrunc), V3_SIDEBAR_W + V3_CONTENT_PAD, V3_HEADER_Y, Theme.TEXT, false)
+		graphics.text(font, ImperiumFonts.label(headerDescriptionTrunc), V3_SIDEBAR_W + V3_CONTENT_PAD, V3_HEADER_Y + 11, Theme.TEXT_SECONDARY, false)
 
 		if (settingsEntry == null) {
 			// search affordance over the pill + the enabled-count badge
 			Theme.drawGlyph(graphics, Theme.GLYPH_SEARCH, searchX() + 7, searchY() + 4, Theme.TEXT_TERTIARY)
-			val text = Component.translatable("imperium.menu.enabled_count", enabledCount()).string
+			val count = enabledCount()
+			if (count != enabledBadgeCount) {
+				enabledBadgeCount = count
+				enabledBadgeText = Component.translatable("imperium.menu.enabled_count", count).string
+			}
+			val text = enabledBadgeText
 			val w = ImperiumFonts.width(font, text, ImperiumFonts.BARLOW_SEMIBOLD) + 22
 			val x = searchX() - 6 - w
 			Theme.roundRect(graphics, x, V3_HEADER_Y + 3, w, V3_BADGE_H, Theme.SECONDARY, V3_BADGE_H / 2f)
@@ -1167,7 +1209,8 @@ class ImperiumMenuScreen(private val parent: Screen?) :
 	}
 
 	private fun extractSegmentsV3(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int) {
-		val labels = segmentLabels()
+		ensureSegmentCache()
+		val labels = segmentLabelsCache
 		for (i in MenuCategory.entries.indices) {
 			val c = MenuCategory.entries[i]
 			val selected = c == category
