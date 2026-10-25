@@ -134,7 +134,7 @@ object EnforcementService {
 		}
 
 		AxolotlClientCommon.getInstance().logger
-			.info("Local rules enforcement layer ready (scoped to the configured ImperiumMC allowlist)")
+			.info("Local rules enforcement layer ready (scoped to the configured Romanica allowlist)")
 	}
 
 	private fun resetSessionState() {

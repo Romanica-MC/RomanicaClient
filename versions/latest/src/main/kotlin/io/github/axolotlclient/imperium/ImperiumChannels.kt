@@ -107,7 +107,7 @@ object ImperiumChannels {
 			ServerCooldownsRegistry.clear()
 		}
 
-		AxolotlClientCommon.getInstance().logger.info("ImperiumMC data channels ready (legion/boosts/cooldowns)")
+		AxolotlClientCommon.getInstance().logger.info("Romanica data channels ready (legion/boosts/cooldowns)")
 	}
 
 	private fun id(path: String): Identifier = Identifier.fromNamespaceAndPath(NAMESPACE, path)

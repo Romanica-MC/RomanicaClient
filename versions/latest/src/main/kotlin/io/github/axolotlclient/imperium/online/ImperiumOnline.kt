@@ -101,7 +101,7 @@ object ImperiumOnline : ClientModInitializer {
 		// to ImperiumMC the API value may (re-)fill it as the fallback source.
 		ClientPlayConnectionEvents.DISCONNECT.register { _, _ -> refreshLegionFallback() }
 
-		AxolotlClientCommon.getInstance().logger.debug("ImperiumMC online services initialized")
+		AxolotlClientCommon.getInstance().logger.debug("Romanica online services initialized")
 	}
 
 	/**
@@ -112,9 +112,9 @@ object ImperiumOnline : ClientModInitializer {
 		auth.authenticateAsync().whenComplete { state, _ ->
 			when (state) {
 				is ClientApiAuth.State.Authenticated ->
-					AxolotlClientCommon.getInstance().logger.info("ImperiumMC online session established ({})", what)
+					AxolotlClientCommon.getInstance().logger.info("Romanica online session established ({})", what)
 				is ClientApiAuth.State.OfflineSession -> {
-					AxolotlClientCommon.getInstance().logger.debug("ImperiumMC online auth skipped: no Microsoft session")
+					AxolotlClientCommon.getInstance().logger.debug("Romanica online auth skipped: no Microsoft session")
 					return@whenComplete
 				}
 				is ClientApiAuth.State.Failed -> {
@@ -123,7 +123,7 @@ object ImperiumOnline : ClientModInitializer {
 						// One line per failure streak, not one per attempt.
 						failureLogged = true
 						AxolotlClientCommon.getInstance().logger.info(
-							"ImperiumMC online features unavailable ({})", state.reason,
+							"Romanica online features unavailable ({})", state.reason,
 						)
 					}
 					return@whenComplete

@@ -1346,7 +1346,7 @@
 	"infohud.brace_style.dash": "Dash",
 	"infohud.brace_style.none": "None",
 	"highlight_group_members": "Highlight Group Members",
-	"highlight_group_members.tooltip": "Highlights your legion's members in the tab list (needs the legion member list from the ImperiumMC API or channel).",
+	"highlight_group_members.tooltip": "Highlights your legion's members in the tab list (needs the legion member list from the Romanica API or channel).",
 	"highlight_color_group": "Group Highlight Color",
 	"compact_time_based": "Compact Chat: Time Based",
 	"compact_time_based.tooltip": "Stack duplicates that arrive within the time window even when other messages came in between.",

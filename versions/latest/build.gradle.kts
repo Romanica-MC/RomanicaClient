@@ -18,7 +18,7 @@ val modmenu = "18.0.0-alpha.8"
 val fapi = "0.161.0+26.3"
 group = project.property("maven_group") as String
 version = "${project.property("version")}+$minecraftFriendly"
-base.archivesName = "ImperiumClient"
+base.archivesName = project.property("archives_base_name") as String
 
 loom {
 	accessWidenerPath.set(file("src/main/resources/axolotlclient.classtweaker"))

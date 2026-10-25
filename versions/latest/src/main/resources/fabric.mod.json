@@ -17,8 +17,8 @@
 	],
 	"contact": {
 		"homepage": "https://romanica.net",
-		"sources": "https://github.com/Imperium-MC/ImperiumClient",
-		"issues": "https://github.com/Imperium-MC/ImperiumClient/issues"
+		"sources": "https://github.com/Romanica-MC/RomanicaClient",
+		"issues": "https://github.com/Romanica-MC/RomanicaClient/issues"
 	},
 	"license": "LGPL-3.0-or-later",
 	"icon": "assets/imperiumclient/icon.png",

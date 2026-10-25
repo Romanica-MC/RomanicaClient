@@ -81,7 +81,7 @@ object ImperiumIntegration {
 			ctx.client().execute(Runnable { ImperiumClientSession.getInstance().applyFeatures(payload.json()) })
 		}
 
-		AxolotlClientCommon.getInstance().logger.info("ImperiumMC integration ready (hello/features channels)")
+		AxolotlClientCommon.getInstance().logger.info("Romanica integration ready (hello/features channels)")
 	}
 
 	/**
