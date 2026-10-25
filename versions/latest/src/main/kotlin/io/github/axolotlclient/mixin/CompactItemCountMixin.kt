@@ -22,11 +22,12 @@
 
 package io.github.axolotlclient.mixin
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation
 import io.github.axolotlclient.modules.inventoryTweaks.InventoryTweaks
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import org.spongepowered.asm.mixin.Mixin
 import org.spongepowered.asm.mixin.injection.At
-import org.spongepowered.asm.mixin.injection.Redirect
 
 /**
  * compact_item_counts (inventory_tweaks): routes the stack-count string every GUI item
@@ -34,15 +35,20 @@ import org.spongepowered.asm.mixin.injection.Redirect
  * single funnel — container slots, the hotbar and the carried item all end here — and it only
  * stringifies the count itself when the caller did not pass an override text (vanilla's
  * quick-craft "over max stack" hint keeps its own yellow text).
+ *
+ * @WrapOperation, not @Redirect: ViaFabricPlus redirects the same String.valueOf call, and two
+ * redirects on one call site are a hard Mixin failure (crashed every launch, 2026-10-25). Counts
+ * we don't compact fall through to `original`, so the other mod's handler still runs.
  */
 @Mixin(GuiGraphicsExtractor::class)
 abstract class CompactItemCountMixin {
 
-    @Redirect(
+    @WrapOperation(
         method = ["itemCount"],
         at = [At(value = "INVOKE", target = "Ljava/lang/String;valueOf(I)Ljava/lang/String;")]
     )
-    private fun `axolotlclient$compactCount`(count: Int): String {
-        return InventoryTweaks.getInstance().formatCount(count)
+    private fun `axolotlclient$compactCount`(count: Int, original: Operation<String>): String {
+        val compact = InventoryTweaks.getInstance().formatCount(count)
+        return if (compact != count.toString()) compact else original.call(count)
     }
 }
