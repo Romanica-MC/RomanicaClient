@@ -27,6 +27,7 @@ import java.util.function.BooleanSupplier
 import java.util.function.Consumer
 
 import io.github.axolotlclient.AxolotlClientConfig.api.options.OptionCategory
+import net.minecraft.world.item.ItemStack
 
 /**
  * One card in the Imperium menu. `isEnabled`/`setEnabled` are null for entries that
@@ -40,6 +41,18 @@ class MenuEntry(
 	private val isEnabled: BooleanSupplier?,
 	private val setEnabled: Consumer<Boolean>?
 ) {
+
+	/**
+	 * Icon resolved once at menu build (pass-4 hot path #3): specificIconFor walked
+	 * ~80 substring checks per visible card per frame before this cache existed.
+	 * MenuEntry is immutable in id/name/category, so the icon never changes.
+	 */
+	var cachedIcon: ItemStack? = null
+		private set
+
+	fun cacheIcon(icon: ItemStack) {
+		if (cachedIcon == null) cachedIcon = icon
+	}
 
 	fun id(): String = id
 
