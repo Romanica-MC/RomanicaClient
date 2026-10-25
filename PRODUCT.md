@@ -18,7 +18,9 @@ clients because it is quicker, cleaner and feels like part of the server, and ne
 setting without asking in Discord.
 
 ## Business Model
-The client and launcher are free, with every feature included, for good (owner decision, 2026-10-25). They
+The client and launcher are free, with every feature included, and fully open source, for good (owner
+decision, 2026-10-25). The client stays LGPL-3.0 (inherited from its upstream, so it can't be relicensed) and
+the launcher MIT; the Romanica name and artwork are not part of either licence. They
 are how players find and stay with the Romanica server; anyone who wants to support the project does it by
 spending on the server's store. No ads, no sponsored panels or partner links, no "upgrade" prompts, no
 locked features. Cosmetics are sold only when they belong to the server (rank capes, event rewards earned

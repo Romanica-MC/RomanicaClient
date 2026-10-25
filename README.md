@@ -45,3 +45,9 @@ Issues and PRs are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md). Plans and de
 
 Built on AxolotlClient by moehreag and contributors. Like upstream, this project is licensed under the
 LGPL-3.0, see [LICENSE](LICENSE).
+
+Romanica names, logos and artwork are not covered by the LGPL and belong to the project owner; forks must
+use their own branding.
+
+Romanica Client is not an official Minecraft product and is not approved by or associated with Mojang or
+Microsoft.
