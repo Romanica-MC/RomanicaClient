@@ -239,7 +239,15 @@ object EnforcementService {
 	 */
 	fun processOutgoing(connection: Connection?, packet: Packet<*>?): Packet<*>? {
 		hookPulse.incrementAndGet()
-		if (packet == null || !isConnectionInScope(connection)) {
+		if (packet == null) {
+			return null
+		}
+		if (!isConnectionInScope(connection)) {
+			// Any other server: leave the packet alone, except that our own channels are not
+			// announced or spoken there (singleplayer's in-memory connection is unaffected).
+			if (packet is ServerboundCustomPayloadPacket && connection != null && !connection.isMemoryConnection) {
+				return hideOwnChannels(packet)
+			}
 			return packet
 		}
 
@@ -462,6 +470,19 @@ object EnforcementService {
 			return null
 		}
 		return packet
+	}
+
+	private fun hideOwnChannels(packet: ServerboundCustomPayloadPacket): Packet<*>? {
+		val payload: CustomPacketPayload = packet.payload()
+		if (ChannelGuard.isFabricRegisterPayload(payload)) {
+			val rebuilt = ChannelGuard.filterFabricRegisterPayload(payload) { !ChannelGuard.isOwnChannel(it) }
+			return when {
+				rebuilt == null -> null
+				rebuilt === payload -> packet
+				else -> ServerboundCustomPayloadPacket(rebuilt as CustomPacketPayload)
+			}
+		}
+		return if (ChannelGuard.isOwnChannel(payload.type().id().toString())) null else packet
 	}
 
 	// ── Logging + test hooks ────────────────────────────────────────────────────
