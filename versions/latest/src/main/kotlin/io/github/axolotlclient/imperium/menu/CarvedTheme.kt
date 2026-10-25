@@ -222,8 +222,14 @@ object CarvedTheme {
 	 * a keyword hit get their natural item, and the rest fall back to a per-category item.
 	 */
 	@JvmStatic
-	fun iconFor(entry: MenuEntry): ItemStack =
-		specificIconFor(entry) ?: categoryDefaultIcon(entry.category())
+	fun iconFor(entry: MenuEntry): ItemStack {
+		// Resolve once per entry (see MenuEntry.cachedIcon): the keyword walk is
+		// ~80 substring checks and used to run per visible card per frame.
+		entry.cachedIcon?.let { return it }
+		val resolved = specificIconFor(entry) ?: categoryDefaultIcon(entry.category())
+		entry.cacheIcon(resolved)
+		return resolved
+	}
 
 	/**
 	 * The keyword-matched item for a module, or null when nothing matched — used by the
