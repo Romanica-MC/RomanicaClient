@@ -45,6 +45,7 @@ import net.minecraft.world.entity.item.PrimedTnt
 import net.minecraft.world.item.Items
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 
 /**
  * TNT trajectory prediction (Alpine "factions/cannon_view + cannon_playback" parity,
@@ -111,12 +112,47 @@ class CannonTrajectory private constructor() : AbstractModule() {
     /** Last drawn waypoint count, for the gametest's render assertions. */
     private var lastDrawnSegments = 0
 
+    /**
+     * Live TNT snapshot, rebuilt on the client tick instead of per frame: the render
+     * hook used to walk `entitiesForRendering()` (every entity, every frame) even with
+     * zero TNT in the world (review pass-4 hot path #2). PrimedTnt physics advances at
+     * 20 Hz, so a per-tick scan loses nothing visually; the render hook only integrates.
+     */
+    @Volatile
+    private var liveTnt: List<TntSnapshot> = emptyList()
+
+    private data class TntSnapshot(val x: Double, val y: Double, val z: Double, val dx: Double, val dy: Double, val dz: Double)
+
     override fun init() {
         category.add(enabled, launchPower, maxTicks, predictLiveTnt, range, showLandingBox, arcColor, landingColor, lineWidth)
         AxolotlClientCommon.getInstance().getConfig().addCategory(category)
         toggleKey.`br$registerOnConsumeClick` {
             enabled.toggle()
             AxolotlClientCommon.getInstance().saveConfig()
+        }
+
+        ClientTickEvents.END_CLIENT_TICK.register {
+            if (!enabled.get() || !predictLiveTnt.get()) {
+                liveTnt = emptyList()
+                return@register
+            }
+            val client = Minecraft.getInstance()
+            val level = client.level
+            if (level == null) {
+                liveTnt = emptyList()
+                return@register
+            }
+            val maxDistSq = range.get().toDouble() * range.get()
+            val camera = client.gameRenderer.mainCamera().position()
+            val found = ArrayList<TntSnapshot>(4)
+            for (entity in level.entitiesForRendering()) {
+                if (entity !is PrimedTnt) continue
+                if (entity.distanceToSqr(camera) > maxDistSq) continue
+                val pos = entity.position()
+                val delta = entity.deltaMovement
+                found.add(TntSnapshot(pos.x, pos.y, pos.z, delta.x, delta.y, delta.z))
+            }
+            liveTnt = found
         }
 
         LevelRenderEvents.BEFORE_GIZMOS.register(LevelRenderEvents.BeforeGizmos { context ->
@@ -141,22 +177,12 @@ class CannonTrajectory private constructor() : AbstractModule() {
                     )
                 )
             }
-            if (predictLiveTnt.get()) {
-                val maxDistSq = range.get().toDouble() * range.get()
-                val camera = client.gameRenderer.mainCamera().position()
-                for (entity in level.entitiesForRendering()) {
-                    if (entity !is PrimedTnt) {
-                        continue
-                    }
-                    if (entity.distanceToSqr(camera) > maxDistSq) {
-                        continue
-                    }
-                    val pos = entity.position()
-                    val delta = entity.deltaMovement
-                    // PrimedTnt's entity origin sits at its feet and its physics tick from
-                    // there, so the prediction integrates the origin, like the entity does.
-                    flights.add(Flight(pos.x, pos.y, pos.z, delta.x, delta.y, delta.z, arcColor.get().toInt()))
-                }
+            // PrimedTnt's entity origin sits at its feet and its physics tick from
+            // there, so the prediction integrates the origin, like the entity does.
+            // The scan itself lives on the client tick (see liveTnt) — the render
+            // hook only integrates the snapshot.
+            for (t in liveTnt) {
+                flights.add(Flight(t.x, t.y, t.z, t.dx, t.dy, t.dz, arcColor.get().toInt()))
             }
             if (flights.isEmpty()) {
                 lastDrawnSegments = 0
