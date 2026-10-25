@@ -114,6 +114,7 @@ class MSApi(private val accounts: Accounts, private val languageSupplier: Suppli
                                     prev.msaToken = a.msaToken
                                     prev.name = a.name
                                     prev.refreshToken = a.refreshToken
+                                    prev.clientId = a.clientId
                                     loginAccount = prev
                                 }
                                 accounts.login(loginAccount)
@@ -161,6 +162,7 @@ class MSApi(private val accounts: Accounts, private val languageSupplier: Suppli
             logger.debug("getting profile...")
             val profile = MCProfile.get(profileJson)
             Account(profile.name, profile.id, mc.accessToken, mc.expiration, refreshToken, accessToken)
+                .also { it.clientId = CLIENT_ID }
         }
 
     @JvmRecord
@@ -402,6 +404,13 @@ class MSApi(private val accounts: Accounts, private val languageSupplier: Suppli
         )
 
     fun refresh(account: Account): CompletableFuture<Account> {
+        // A refresh token from another Azure app (accounts saved before the switch
+        // to Romanica's app) can't be refreshed here: ask the player to sign in
+        // again instead of sending it and surfacing an "unexpected response".
+        if (!isIssuedByThisApp(account)) {
+            logger.info("Account ${account.name} was signed in with a previous app, asking to sign in again.")
+            return accounts.showAccountsExpiredScreen(account)
+        }
         logger.debug("refreshing auth code...")
         return requestJson(
             HttpRequest
@@ -437,6 +446,7 @@ class MSApi(private val accounts: Accounts, private val languageSupplier: Suppli
                     account.name = refreshed.name
                     account.msaToken = refreshed.msaToken
                     account.expiration = refreshed.expiration
+                    account.clientId = refreshed.clientId
                     accounts.save()
                     account
                 }
@@ -591,7 +601,12 @@ class MSApi(private val accounts: Accounts, private val languageSupplier: Suppli
             .thenApply { this.extractProfile(it) }
 
     companion object {
-        private const val CLIENT_ID = "938592fc-8e01-4c6d-b56d-428c7d9cf5ea" // AxolotlClient MSA ClientID
+        // Romanica's own Azure app (device-code sign-in enabled). Never another client's ID.
+        const val CLIENT_ID = "8b0c9e33-b6ce-40ec-ac30-c85a35dd8163"
+
+        @JvmStatic
+        fun isIssuedByThisApp(account: Account): Boolean = account.clientId == CLIENT_ID
+
         private const val SCOPES = "XboxLive.signin offline_access"
         private const val XBL_AUTH_URL = "https://user.auth.xboxlive.com/user/authenticate"
         private const val MS_DEVICE_CODE_LOGIN_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode?mkt="
