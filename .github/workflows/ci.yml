@@ -66,7 +66,7 @@ jobs:
           f=versions/latest/build/test-results/test/TEST-io.github.axolotlclient.modules.auth.AccountsTokenStorageTest.xml
           test -f "$f" || { echo "no test report"; exit 1; }
           grep -o 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' "$f"
-          grep -q 'testcase name="windowsFileHoldsNoReadableToken"' "$f"
+          grep -q 'testcase name="windowsFileHoldsNoReadableToken' "$f"
           if grep -A1 'testcase name="windows' "$f" | grep -q '<skipped'; then echo "DPAPI tests were skipped"; exit 1; fi
 
   # The client gametest spins a real Minecraft client. GitHub's ubuntu runners
