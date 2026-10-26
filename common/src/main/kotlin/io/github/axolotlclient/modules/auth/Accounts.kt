@@ -25,6 +25,8 @@ package io.github.axolotlclient.modules.auth
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.PosixFilePermissions
 import java.util.concurrent.CompletableFuture
 
 import com.google.gson.JsonArray
@@ -63,16 +65,30 @@ abstract class Accounts {
             }
         }
         if (Files.exists(saveFile)) {
+            var foundPlainTokens = false
             try {
-                val list = GsonHelper.GSON.fromJson(Files.newBufferedReader(saveFile), JsonObject::class.java)
+                val list = Files.newBufferedReader(saveFile).use { GsonHelper.GSON.fromJson(it, JsonObject::class.java) }
                 if (list != null) {
                     list.get("accounts").asJsonArray.forEach { jsonElement ->
-                        accounts.add(Account.deserialize(jsonElement.asJsonObject))
+                        val obj = jsonElement.asJsonObject
+                        if (TOKEN_FIELDS.any { obj.has(it) && obj.get(it).asString.isNotEmpty() && !TokenVault.isSealed(obj.get(it).asString) }) {
+                            foundPlainTokens = true
+                        }
+                        if (openTokens(obj)) {
+                            accounts.add(Account.deserialize(obj))
+                        } else {
+                            logger.warn("Skipping a saved account whose sign-in can't be decrypted on this PC/Windows user; sign in again to add it back.")
+                        }
                     }
                 }
             } catch (e: IOException) {
                 logger.warn("Failed to load accounts file!", e)
             }
+            // Migrate files written before tokens were encrypted, and remove the legacy copy,
+            // which still holds them in plain text.
+            if (foundPlainTokens && TokenVault.isWindows) save()
+            restrictToOwner(saveFile)
+            deleteLegacyCopy(legacy.resolveSibling("accounts.json.old"))
         } else {
             try {
                 Files.createDirectories(accountsSaveFile.parent)
@@ -99,15 +115,67 @@ abstract class Accounts {
 
     fun save() {
         val array = JsonArray()
-        accounts.forEach { account -> array.add(account.serialize()) }
+        accounts.forEach { account -> array.add(sealTokens(account.serialize())) }
         val obj = JsonObject()
         obj.add("accounts", array)
         try {
-            Files.createDirectories(accountsSaveFile.parent)
-            Files.writeString(accountsSaveFile, GsonHelper.GSON.toJson(obj))
+            val file = accountsSaveFile
+            Files.createDirectories(file.parent)
+            // Write a sibling temp file and swap it in, so a crash mid-write never leaves a
+            // half-written accounts file.
+            val tmp = file.resolveSibling(file.fileName.toString() + ".tmp")
+            Files.writeString(tmp, GsonHelper.GSON.toJson(obj))
+            restrictToOwner(tmp)
+            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } catch (e: IOException) {
             logger.error("Failed to save acounts config!", e)
         }
+    }
+
+    private fun sealTokens(obj: JsonObject): JsonObject {
+        TOKEN_FIELDS.forEach { field ->
+            if (obj.has(field)) obj.addProperty(field, TokenVault.seal(obj.get(field).asString))
+        }
+        return obj
+    }
+
+    /** Opens sealed tokens in place; false when one can't be opened on this PC/user. */
+    private fun openTokens(obj: JsonObject): Boolean {
+        TOKEN_FIELDS.forEach { field ->
+            if (obj.has(field)) {
+                val opened = TokenVault.open(obj.get(field).asString) ?: return false
+                obj.addProperty(field, opened)
+            }
+        }
+        return true
+    }
+
+    // Where the OS supports it, only the file's owner may read it (the protection on
+    // systems without DPAPI, and a second layer on top of it elsewhere).
+    private fun restrictToOwner(file: Path) {
+        try {
+            Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-------"))
+        } catch (e: UnsupportedOperationException) {
+            // Windows: no POSIX permissions; the user profile folder and DPAPI protect the file.
+        } catch (e: IOException) {
+            logger.warn("Could not restrict accounts file permissions", e)
+        }
+    }
+
+    private fun deleteLegacyCopy(file: Path) {
+        if (!Files.exists(file)) return
+        try {
+            // Overwrite before deleting so the old tokens don't linger in the file's blocks.
+            Files.write(file, ByteArray(Files.size(file).toInt()))
+            Files.delete(file)
+            logger.info("Removed the legacy accounts.json.old copy (it held sign-in tokens in plain text).")
+        } catch (e: IOException) {
+            logger.warn("Could not remove legacy accounts.json.old", e)
+        }
+    }
+
+    private companion object {
+        val TOKEN_FIELDS = listOf("authToken", "msToken", "refreshToken")
     }
 
     private val logger: Logger

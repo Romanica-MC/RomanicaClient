@@ -42,6 +42,13 @@ open class Account(
     private constructor(uuid: String, name: String, authToken: String, msaToken: String, refreshToken: String, expiration: Long) :
         this(name, uuid, authToken, Instant.ofEpochSecond(expiration), refreshToken, msaToken)
 
+    /**
+     * The Azure app that issued [refreshToken]. Refresh tokens only work with the
+     * app that issued them; accounts saved before Romanica's own app (or offline
+     * accounts) have none, and must sign in again rather than refresh.
+     */
+    var clientId: String = ""
+
     fun refresh(auth: MSApi): CompletableFuture<Account> {
         if (isOffline) return CompletableFuture.failedFuture(UnsupportedOperationException())
         return auth.refresh(this)
@@ -58,6 +65,7 @@ open class Account(
         obj.addProperty("msToken", msaToken)
         obj.addProperty("refreshToken", refreshToken ?: "")
         obj.addProperty("expiration", expiration?.epochSecond ?: 0)
+        obj.addProperty("clientId", clientId)
         return obj
     }
 
@@ -81,7 +89,9 @@ open class Account(
             val refreshToken = objectNode.get("refreshToken").asString
             val msaToken = if (objectNode.has("msToken")) objectNode.get("msToken").asString else ""
             val expiration = objectNode.get("expiration").asLong
-            return Account(uuid, name, authToken, msaToken, refreshToken, expiration)
+            return Account(uuid, name, authToken, msaToken, refreshToken, expiration).also {
+                it.clientId = if (objectNode.has("clientId")) objectNode.get("clientId").asString else ""
+            }
         }
     }
 }

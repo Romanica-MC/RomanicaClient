@@ -37,6 +37,9 @@ dependencies {
 	compileOnly("org.lwjgl:lwjgl-glfw:3.3.2")
 	compileOnly("org.lwjgl:lwjgl-tinyfd:3.3.2")
 	compileOnly("org.lwjgl:lwjgl-sdl:3.4.1")
+	// Windows DPAPI for TokenVault. Minecraft ships JNA and jna-platform at runtime.
+	compileOnly("net.java.dev.jna:jna:5.15.0")
+	compileOnly("net.java.dev.jna:jna-platform:5.15.0")
 
 	shadow(implementation("io.github.cdagaming:DiscordIPC:0.11.3") {
 		isTransitive = false

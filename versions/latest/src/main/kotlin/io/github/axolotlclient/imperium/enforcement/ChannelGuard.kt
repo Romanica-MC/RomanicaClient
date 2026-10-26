@@ -85,6 +85,14 @@ object ChannelGuard {
 		return ALLOWED_NAMESPACES.contains(namespace)
 	}
 
+	/**
+	 * True for our own `imperiumclient:` channels. Off the Romanica network these are never
+	 * announced or sent, so other servers can't tell a player is running this client.
+	 */
+	@JvmStatic
+	fun isOwnChannel(channel: String?): Boolean =
+		channel != null && channel.lowercase(Locale.ROOT).startsWith("imperiumclient:")
+
 	/** Filters a channel-name list (as carried by register/unregister payloads) to the allowlist. */
 	@JvmStatic
 	fun filterChannelNames(channels: List<String>): MutableList<String> {
@@ -110,7 +118,8 @@ object ChannelGuard {
 	 *         whole announcement); the original payload on a reflective failure (fail-open).
 	 */
 	@JvmStatic
-	fun filterFabricRegisterPayload(payload: Any): Any? {
+	@JvmOverloads
+	fun filterFabricRegisterPayload(payload: Any, keep: (String) -> Boolean = ::isChannelAllowed): Any? {
 		try {
 			val payloadClass = payload.javaClass
 			val version = payloadClass.getMethod("version")
@@ -121,7 +130,7 @@ object ChannelGuard {
 			val kept = ArrayList<Any?>(channelSet.size)
 			var changed = false
 			for (channel in channelSet) {
-				if (isChannelAllowed(channel.toString())) {
+				if (keep(channel.toString())) {
 					kept.add(channel)
 				} else {
 					changed = true
