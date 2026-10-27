@@ -87,16 +87,10 @@ jobs:
   # protocol/logic pins into plain JUnit for fast CI coverage is tracked in
   # the work order (issue #12).
   gametest:
-    name: Gametest (manual, ${{ matrix.display }})
+    name: Gametest
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        # offscreen: SDL3's offscreen video driver renders through EGL with no X
-        # server at all, which avoids the GLX visual lookup that fails under xvfb.
-        display: [offscreen, xvfb]
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -110,33 +104,26 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Install display and GL dependencies
+      - name: Install GL dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb libgl1 libglx-mesa0 libgl1-mesa-dri mesa-utils libegl1 libegl-mesa0 libgbm1
+          sudo apt-get install -y --no-install-recommends libgl1 libegl1 libegl-mesa0 libgl1-mesa-dri libgbm1
 
-      # Known broken (2026-10-25): under xvfb the 26.x renderer fails at boot
-      # with "Couldn't find matching GLX visual" and the client then sits at a
-      # dead window (every dispatched run before this hung to the 90-minute
-      # job limit; it was never slow, it never started). Forcing SDL onto EGL
-      # (SDL_VIDEO_X11_FORCE_EGL) did not change it: run 40150696898. The step
-      # timeout makes a dead boot a failure instead of a silent cancel.
-      - name: Client gametests (headless ci subset)
+      # SDL's offscreen video driver renders through Mesa EGL (llvmpipe) with no X
+      # server. Under xvfb the 26.x client never booted ("Couldn't find matching GLX
+      # visual"); offscreen boots in seconds (run 40439686175).
+      - name: Client gametests (full suite)
         timeout-minutes: 30
         env:
-          LIBGL_ALWAYS_SOFTWARE: "1"
-        run: |
-          if [ "${{ matrix.display }}" = offscreen ]; then
-            SDL_VIDEO_DRIVER=offscreen EGL_PLATFORM=surfaceless ./gradlew :latest:runClientGameTest -Pimperium.fastGametests
-          else
-            xvfb-run -a -s "-screen 0 1280x1024x24 +extension GLX" sh -c 'glxinfo -B | grep -E "OpenGL (renderer|version)"; ./gradlew :latest:runClientGameTest -Pimperium.fastGametests'
-          fi
+          SDL_VIDEO_DRIVER: offscreen
+          EGL_PLATFORM: surfaceless
+        run: ./gradlew :latest:runClientGameTest
 
       - name: Upload screenshots and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gametest-run-${{ matrix.display }}
+          name: gametest-run
           path: |
             versions/latest/build/run/clientGameTest/screenshots/
             versions/latest/build/run/clientGameTest/logs/
