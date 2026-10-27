@@ -69,26 +69,12 @@ jobs:
           grep -q 'testcase name="windowsFileHoldsNoReadableToken' "$f"
           if grep -A1 'testcase name="windows' "$f" | grep -q '<skipped'; then echo "DPAPI tests were skipped"; exit 1; fi
 
-  # The client gametest spins a real Minecraft client. GitHub's ubuntu runners
-  # have no GPU, so this runs under xvfb with mesa's software GL (llvmpipe),
-  # which renders roughly 20x slower than a real GPU: the full suite needs
-  # over an hour here and cannot finish. CI therefore runs the headless "ci"
-  # subset instead (-Pimperium.fastGametests): the logic/protocol tests that
-  # need no world rendering (ImperiumGametestSubsets in the test source set
-  # picks the subset; the framework itself can only filter whole mods). The
-  # subset boots the client once, runs no worlds, and completes in minutes —
-  # no continue-on-error needed. The full suite (all tests, screenshots) stays
-  # the default locally on a real GPU and runs before every release.
-  # Manual-only: the full client BOOT under mesa software GL takes longer than
-  # any practical job budget on 2-core runners (measured: a 75-second local
-  # subset did not finish in 60 minutes headless; boot, not the tests, is the
-  # wall). The required build job gates every push; the full gametest suite
-  # runs locally on a real GPU before every release; extracting the pure
-  # protocol/logic pins into plain JUnit for fast CI coverage is tracked in
-  # the work order (issue #12).
+  # The full client gametest suite boots a real Minecraft client, creates and joins
+  # singleplayer worlds and takes screenshots. It runs under SDL's offscreen video
+  # driver on Mesa (llvmpipe) with no X server; under xvfb the 26.x client never
+  # booted ("Couldn't find matching GLX visual"). About 4 minutes per run.
   gametest:
     name: Gametest
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
