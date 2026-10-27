@@ -182,10 +182,12 @@ class MinimapTexture {
 		}
 		recenter(playerX, playerZ)
 
-		// A full invalidation (first fill, teleport, zoom change) still spends the large
-		// budget so the map fills quickly; the steady-state refresh is the rolling sweep
-		// below, which costs a flat, tiny slice per tick instead of a rescan burst.
-		var budget = if (allDirty) SAMPLE_BUDGET else SWEEP_BUDGET
+		// Explicitly dirty texels (first fill, teleport, zoom change, edge strips exposed by
+		// movement, chunk loads) get the large budget so the map never shows a blank edge;
+		// only the steady-state refresh is limited to the rolling sweep's flat, tiny slice.
+		// Giving dirty texels the sweep budget left a blank strip for several ticks after
+		// every move (MinimapGameTest, first run in CI 2026-10-27).
+		var budget = SAMPLE_BUDGET
 		var wrote = false
 		if (allDirty) {
 			// Keep the old colours visible while the resample runs, so invalidations
@@ -210,9 +212,10 @@ class MinimapTexture {
 			image!!.setPixel(x, z, color)
 			wrote = true
 		}
-		// Pass 2: rolling sweep with whatever budget is left — every tick re-samples a
+		// Pass 2: rolling sweep, at most SWEEP_BUDGET per tick — every tick re-samples a
 		// slice starting at the cursor, wrapping around, so the whole grid refreshes over
 		// gridSize^2 / SWEEP_BUDGET ticks (a few seconds) without ever pausing a frame.
+		budget = minOf(budget, SWEEP_BUDGET)
 		while (budget > 0 && gridSize > 0) {
 			val t = sweepCursor
 			sweepCursor++
