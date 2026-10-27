@@ -87,10 +87,16 @@ jobs:
   # protocol/logic pins into plain JUnit for fast CI coverage is tracked in
   # the work order (issue #12).
   gametest:
-    name: Gametest (manual)
+    name: Gametest (manual, ${{ matrix.display }})
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # offscreen: SDL3's offscreen video driver renders through EGL with no X
+        # server at all, which avoids the GLX visual lookup that fails under xvfb.
+        display: [offscreen, xvfb]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -107,7 +113,7 @@ jobs:
       - name: Install display and GL dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb libgl1 libglx-mesa0 libgl1-mesa-dri mesa-utils
+          sudo apt-get install -y --no-install-recommends xvfb libgl1 libglx-mesa0 libgl1-mesa-dri mesa-utils libegl1 libegl-mesa0 libgbm1
 
       # Known broken (2026-10-25): under xvfb the 26.x renderer fails at boot
       # with "Couldn't find matching GLX visual" and the client then sits at a
@@ -120,13 +126,17 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
-          xvfb-run -a -s "-screen 0 1280x1024x24 +extension GLX" sh -c 'glxinfo -B | grep -E "OpenGL (renderer|version)"; ./gradlew :latest:runClientGameTest -Pimperium.fastGametests'
+          if [ "${{ matrix.display }}" = offscreen ]; then
+            SDL_VIDEO_DRIVER=offscreen EGL_PLATFORM=surfaceless ./gradlew :latest:runClientGameTest -Pimperium.fastGametests
+          else
+            xvfb-run -a -s "-screen 0 1280x1024x24 +extension GLX" sh -c 'glxinfo -B | grep -E "OpenGL (renderer|version)"; ./gradlew :latest:runClientGameTest -Pimperium.fastGametests'
+          fi
 
       - name: Upload screenshots and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gametest-run
+          name: gametest-run-${{ matrix.display }}
           path: |
             versions/latest/build/run/clientGameTest/screenshots/
             versions/latest/build/run/clientGameTest/logs/
