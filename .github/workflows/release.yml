@@ -1,0 +1,106 @@
+name: Release
+
+# Publishes a client release from a v* tag, only after the evidence AGENTS.md asks for:
+# the built jar reports the tag's version, the unit tests pass, and the full client
+# gametest suite boots the game and passes. The launcher's distribution index then
+# pins the attached jar (scripts/generate-distro.cjs in RomanicaLauncher).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and check the jar
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build (includes unit tests)
+        run: ./gradlew :latest:build
+
+      - name: Check fabric.mod.json version against the tag
+        run: |
+          shopt -s nullglob
+          jars=()
+          for jar in versions/latest/build/libs/*.jar; do
+            case "$jar" in *-sources.jar) ;; *) jars+=("$jar") ;; esac
+          done
+          [ "${#jars[@]}" -eq 1 ] || { echo "expected exactly one mod jar, found ${#jars[@]}" >&2; exit 1; }
+          scripts/check-release-version.sh "$GITHUB_REF_NAME" "${jars[@]}"
+          sha256sum "${jars[@]}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-jar
+          path: |
+            versions/latest/build/libs/*.jar
+            !versions/latest/build/libs/*-sources.jar
+          if-no-files-found: error
+
+  gametest:
+    name: Gametest (full suite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install GL dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgl1 libegl1 libegl-mesa0 libgl1-mesa-dri libgbm1
+
+      - name: Client gametests
+        timeout-minutes: 30
+        env:
+          SDL_VIDEO_DRIVER: offscreen
+          EGL_PLATFORM: surfaceless
+        run: ./gradlew :latest:runClientGameTest
+
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gametest-run
+          path: |
+            versions/latest/build/run/clientGameTest/screenshots/
+            versions/latest/build/run/clientGameTest/logs/
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish the release
+    needs: [build, gametest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-jar
+          path: dist
+
+      - name: Create the GitHub release with the jar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.jar \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Romanica Client ${GITHUB_REF_NAME#v}" \
+            --generate-notes

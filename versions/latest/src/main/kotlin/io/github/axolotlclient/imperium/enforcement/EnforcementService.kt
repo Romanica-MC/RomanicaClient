@@ -164,13 +164,17 @@ object EnforcementService {
 		if (cached != null) {
 			return cached
 		}
-		val allowed = computeAddressAllowed(connection)
+		// No channel yet (a packet queued while the connection is still being set up,
+		// e.g. opening a singleplayer world): the address is unknown, so it is not
+		// in scope. Not cached: the next packet decides once the channel exists.
+		// Reading it as non-null crashed the game here (gametest run 40442744023).
+		val remote: SocketAddress = connection.remoteAddress ?: return false
+		val allowed = computeAddressAllowed(remote)
 		synchronized(scopeCache) { scopeCache.put(connection, allowed) }
 		return allowed
 	}
 
-	private fun computeAddressAllowed(connection: Connection): Boolean {
-		val remote: SocketAddress = connection.remoteAddress
+	private fun computeAddressAllowed(remote: SocketAddress): Boolean {
 		val socketHost = if (remote is InetSocketAddress) remote.hostString else null
 		// The entered address (ServerData.ip) also carries the SRV hostname; benign off-thread
 		// read of a stable field, at worst null on a race and the socket-host check above decides.
