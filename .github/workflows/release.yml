@@ -4,9 +4,14 @@ name: Release
 # the built jar reports the tag's version, the unit tests pass, and the full client
 # gametest suite boots the game and passes. The launcher's distribution index then
 # pins the attached jar (scripts/generate-distro.cjs in RomanicaLauncher).
+#
+# Two ways in: pushing a v* tag, or running this workflow by hand on main, which
+# releases the version in gradle.properties and has GitHub create the tag on that
+# commit. (Tag pushes from the cloud agent sessions are refused by their git proxy.)
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,8 +21,27 @@ jobs:
     name: Build and check the jar
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v5
+
+      - name: Work out the release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            [ "$GITHUB_REF_NAME" = main ] || { echo "release by hand only from main, not $GITHUB_REF_NAME" >&2; exit 1; }
+            tag="v$(sed -n 's/^version=//p' gradle.properties)"
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "release $tag already exists; bump the version first" >&2; exit 1
+            fi
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag from $GITHUB_SHA"
 
       - uses: actions/setup-java@v5
         with:
@@ -37,7 +61,7 @@ jobs:
             case "$jar" in *-sources.jar) ;; *) jars+=("$jar") ;; esac
           done
           [ "${#jars[@]}" -eq 1 ] || { echo "expected exactly one mod jar, found ${#jars[@]}" >&2; exit 1; }
-          scripts/check-release-version.sh "$GITHUB_REF_NAME" "${jars[@]}"
+          scripts/check-release-version.sh "${{ steps.tag.outputs.tag }}" "${jars[@]}"
           sha256sum "${jars[@]}"
 
       - uses: actions/upload-artifact@v4
@@ -99,8 +123,10 @@ jobs:
       - name: Create the GitHub release with the jar
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.jar \
+          gh release create "$TAG" dist/*.jar \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Romanica Client ${GITHUB_REF_NAME#v}" \
+            --target "$GITHUB_SHA" \
+            --title "Romanica Client ${TAG#v}" \
             --generate-notes
