@@ -59,6 +59,7 @@ public class EmoteWheelGameTest implements FabricClientGameTest {
 	@Override
 	public void runTest(ClientGameTestContext context) {
 		if (ImperiumGametestSubsets.ci()) return; // headless "ci" subset: this suite is render-heavy, see ImperiumGametestSubsets
+		GametestBookkeeping.executed(getClass().getSimpleName());
 		pureShellTests();
 		wheelUxTests(context);
 	}

@@ -58,6 +58,7 @@ public class PerformanceGameTest implements FabricClientGameTest {
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
+		GametestBookkeeping.executed(getClass().getSimpleName());
 		testLimiterStateMachine();
 
 		// The world half summons entities and renders frames with the hide toggles on;

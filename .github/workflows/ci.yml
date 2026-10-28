@@ -105,6 +105,39 @@ jobs:
           EGL_PLATFORM: surfaceless
         run: ./gradlew :latest:runClientGameTest
 
+      # The fabric gametest framework logs nothing about how many tests ran: a suite
+      # that silently executes zero tests (lost entrypoint, broken filter) would
+      # otherwise finish green (#15/#24). Every gametest records itself into
+      # gametests-executed.txt (GametestBookkeeping); this step turns a missing, zero
+      # or below-expected count into a red job and prints the count in the summary.
+      - name: Gametest count and summary
+        if: always()
+        env:
+          ENTRYPOINTS: versions/latest/src/test/resources/fabric.mod.json
+          COUNT_FILE: versions/latest/build/run/clientGameTest/gametests-executed.txt
+        run: |
+          expected=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["entrypoints"]["fabric-client-gametest"]))' "$ENTRYPOINTS")
+          if [ -f "$COUNT_FILE" ]; then
+            executed=$(grep -c . "$COUNT_FILE") || executed=0
+          else
+            executed=0
+            echo "gametest count file missing: the suite never recorded a single test" >&2
+          fi
+          {
+            echo "### Gametest summary"
+            echo ""
+            echo "Executed client gametests: $executed of $expected expected"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "executed=$executed expected=$expected"
+          if [ "$executed" -lt 1 ]; then
+            echo "ZERO client gametests executed - failing the job (#24: a zero-test run must not go green)" >&2
+            exit 1
+          fi
+          if [ "$executed" -lt "$expected" ]; then
+            echo "Only $executed of $expected expected client gametests executed" >&2
+            exit 1
+          fi
+
       - name: Upload screenshots and logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -113,4 +146,5 @@ jobs:
           path: |
             versions/latest/build/run/clientGameTest/screenshots/
             versions/latest/build/run/clientGameTest/logs/
+            versions/latest/build/run/clientGameTest/gametests-executed.txt
           if-no-files-found: ignore

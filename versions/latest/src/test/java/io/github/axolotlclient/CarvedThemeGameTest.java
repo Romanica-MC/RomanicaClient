@@ -44,6 +44,7 @@ public class CarvedThemeGameTest implements FabricClientGameTest {
 	@Override
 	public void runTest(ClientGameTestContext context) {
 		if (ImperiumGametestSubsets.ci()) return; // headless "ci" subset: this suite is render-heavy, see ImperiumGametestSubsets
+		GametestBookkeeping.executed(getClass().getSimpleName());
 
 		// No world: the title-screen open is the untested CARVED context (client level == null).
 		ImperiumClientSession.getInstance().reset();

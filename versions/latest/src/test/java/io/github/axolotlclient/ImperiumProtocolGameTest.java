@@ -51,6 +51,7 @@ public class ImperiumProtocolGameTest implements FabricClientGameTest {
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
+		GametestBookkeeping.executed(getClass().getSimpleName());
 		featuresDecodeConsumesBareUtf8WithoutNbt();
 		featuresEncodeIsRawUtf8RoundTrip();
 		helloEncodeCarriesNoNbtPrefix();

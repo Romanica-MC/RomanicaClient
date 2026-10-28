@@ -50,6 +50,7 @@ public class GatedModulesGameTest implements FabricClientGameTest {
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
+		GametestBookkeeping.executed(getClass().getSimpleName());
 		boolean singleplayer = context.computeOnClient(Minecraft::hasSingleplayerServer);
 		try {
 			gateLocksUngrantedModule(context, singleplayer);

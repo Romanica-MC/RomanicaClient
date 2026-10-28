@@ -86,6 +86,7 @@ public class PerformanceBenchmarkGameTest implements FabricClientGameTest {
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
+		GametestBookkeeping.executed(getClass().getSimpleName());
 		// The benchmark renders hundreds of uncapped frames per feature and its scene
 		// sync is sensitive to a starved client; it is developer tooling, not a release
 		// gate. Run explicitly with -Dimperiumclient.gametest.subset=benchmark.

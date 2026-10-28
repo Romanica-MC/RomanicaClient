@@ -60,6 +60,7 @@ public class ModulesWave3GameTest implements FabricClientGameTest {
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
+		GametestBookkeeping.executed(getClass().getSimpleName());
 		explosionBoxMath();
 		overlayOpacityMath();
 		farmingStackLogic();

@@ -36,5 +36,11 @@ public class AxolotlClientTest implements ClientModInitializer {
 		// The gametest bootstrap: make the active suite subset visible in the run log
 		// (ImperiumGametestSubsets explains how the ci subset is selected).
 		logger.info("Client gametests: subset '{}'", ImperiumGametestSubsets.describe());
+		// The run directory survives between runs (configs, saves), and so would the
+		// executed-count file: a run whose tests all vanished would otherwise be judged
+		// by the previous run's count. Only the gametest launch sets this property.
+		if (Boolean.getBoolean("fabric.client.gametest")) {
+			GametestBookkeeping.resetForNewRun();
+		}
 	}
 }

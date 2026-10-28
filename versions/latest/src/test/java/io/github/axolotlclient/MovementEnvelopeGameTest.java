@@ -48,6 +48,7 @@ public class MovementEnvelopeGameTest implements FabricClientGameTest {
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
+		GametestBookkeeping.executed(getClass().getSimpleName());
 		vanillaSpeedsNeverClamp();
 		cheatSpeedsClampToTheServerEdge();
 		verticalModel();

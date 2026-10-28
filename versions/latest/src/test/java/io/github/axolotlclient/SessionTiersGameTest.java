@@ -53,6 +53,7 @@ public class SessionTiersGameTest implements FabricClientGameTest {
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
+		GametestBookkeeping.executed(getClass().getSimpleName());
 		try {
 			v2ParseLandsAllThreeTiers();
 			v1PayloadsKeepWorking();

@@ -53,6 +53,7 @@ public class TranslationsParityGameTest implements FabricClientGameTest {
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
+		GametestBookkeeping.executed(getClass().getSimpleName());
 		Set<String> english = loadMergedKeys("en_us");
 		check(!english.isEmpty(), "at least one en_us.json must be on the gametest classpath");
 

@@ -47,6 +47,7 @@ public class HudEditorGameTest implements FabricClientGameTest {
 	@Override
 	public void runTest(ClientGameTestContext context) {
 		if (ImperiumGametestSubsets.ci()) return; // headless "ci" subset: this suite needs rendering
+		GametestBookkeeping.executed(getClass().getSimpleName());
 		setTheme(context, MenuTheme.IMPERIUM);
 		double scale = context.computeOnClient(mc -> mc.getWindow().getGuiScale());
 

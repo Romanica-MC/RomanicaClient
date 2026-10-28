@@ -54,6 +54,7 @@ public class ClientAuthGameTest implements FabricClientGameTest {
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
+		GametestBookkeeping.executed(getClass().getSimpleName());
 		happyPathChallengesJoinsVerifies();
 		offlineSessionSkipsEntirely();
 		failuresDegradeToOfflineNeverCrash();
