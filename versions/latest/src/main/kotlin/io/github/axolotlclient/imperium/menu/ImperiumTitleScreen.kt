@@ -33,6 +33,8 @@ import java.util.UUID
 import io.github.axolotlclient.AxolotlClient
 import io.github.axolotlclient.AxolotlClientCommon
 import io.github.axolotlclient.AxolotlClientConfig.impl.util.ConfigStyles
+import io.github.axolotlclient.imperium.changelog.ChangelogScreen
+import io.github.axolotlclient.imperium.changelog.ChangelogService
 import io.github.axolotlclient.imperium.theme.ImperiumFonts
 import io.github.axolotlclient.imperium.theme.ImperiumTheme as Theme
 import io.github.axolotlclient.modules.auth.Auth
@@ -74,6 +76,7 @@ class ImperiumTitleScreen : TitleScreen(false) {
 
 	init {
 		fetchPlayerCount()
+		ChangelogService.refresh() // powers the "What's new" unread dot; never throws
 	}
 
 	override fun init() {
@@ -162,11 +165,23 @@ class ImperiumTitleScreen : TitleScreen(false) {
 		// left half so it never runs into the centred line on narrow windows
 		val copyright = Component.translatable("imperium.title.copyright").string
 		val copyrightW = ImperiumFonts.width(font, copyright)
-		val version = ImperiumFonts.truncate(font, "Romanica Client " + AxolotlClientCommon.VERSION, width / 2 - copyrightW / 2 - 8)
 		graphics.text(
-			font, ImperiumFonts.label(version), INSET, height - FOOTER_H,
+			font, ImperiumFonts.label(whatsNewLayout().version), INSET, height - FOOTER_H,
 			Theme.OVERLAY_TEXT_SECONDARY, false
 		)
+
+		// "What's new" (issue #28): opens the client changelog, dot while unread. The entry
+		// claims up to half the left budget and the version truncates around it, so both
+		// stay on the line and never run into the centred copyright.
+		val layout = whatsNewLayout()
+		val t = fade("whatsnew", hit(layout.x - DOT_CLEARANCE, whatsNewY(), layout.w + DOT_CLEARANCE, FOOTER_H + 4, mouseX, mouseY))
+		graphics.text(
+			font, ImperiumFonts.label(layout.text), layout.x, height - FOOTER_H,
+			lerpColor(Theme.OVERLAY_TEXT_SECONDARY, Theme.OVERLAY_TEXT, t), false
+		)
+		if (ChangelogService.hasUnread()) {
+			graphics.fill(layout.x - DOT_CLEARANCE, height - FOOTER_H + 2, layout.x - DOT_CLEARANCE + 4, height - FOOTER_H + 6, Theme.TEXT_ACCENT)
+		}
 		graphics.text(
 			font, ImperiumFonts.label(copyright), width / 2 - copyrightW / 2, height - FOOTER_H,
 			Theme.OVERLAY_TEXT_SECONDARY, false
@@ -316,6 +331,11 @@ class ImperiumTitleScreen : TitleScreen(false) {
 			)
 			return true
 		}
+		if (hit(whatsNewX() - 9, whatsNewY(), whatsNewW() + 9, FOOTER_H + 4, mx, my)) {
+			pressedKey = "whatsnew"
+			openWhatsNew()
+			return true
+		}
 		if (my >= rowY() && my < rowY() + ROW_H) {
 			if (mx >= optionX() && mx < optionX() + ROW_BTN_W) {
 				pressedKey = "options"
@@ -339,6 +359,50 @@ class ImperiumTitleScreen : TitleScreen(false) {
 
 	private fun openLink(url: String) {
 		ConfirmLinkScreen.confirmLinkNow(this, URI.create(url))
+	}
+
+	private fun hit(x: Int, y: Int, w: Int, h: Int, mx: Int, my: Int): Boolean =
+		mx >= x && mx < x + w && my >= y && my < y + h
+
+	// ── What's new (issue #28) ───────────────────────────────────────────────────────────────
+
+	fun whatsNewX(): Int = whatsNewLayout().x
+
+	fun whatsNewY(): Int = height - FOOTER_H - 2
+
+	fun whatsNewW(): Int = whatsNewLayout().w + DOT_CLEARANCE
+
+	/**
+	 * The footer's left half, laid out in one place so the drawn text and the click
+	 * region can never drift apart: the entry claims up to half the budget (after the
+	 * centred copyright), the version truncates around it, the dot hangs in the gap.
+	 */
+	private fun whatsNewLayout(): Layout {
+		val copyright = Component.translatable("imperium.title.copyright").string
+		val leftBudget = max(0, width / 2 - ImperiumFonts.width(font, copyright) / 2 - 8)
+		val whatsNewLabel = Component.translatable("imperium.changelog.whats_new").string
+		val labelW = min(ImperiumFonts.width(font, whatsNewLabel), leftBudget / 2)
+		val text = ImperiumFonts.truncate(font, whatsNewLabel, labelW)
+		val version = ImperiumFonts.truncate(
+			font, "Romanica Client " + AxolotlClientCommon.VERSION,
+			max(0, leftBudget - labelW - 10 - DOT_CLEARANCE)
+		)
+		return Layout(version, INSET + ImperiumFonts.width(font, version) + 10, text, ImperiumFonts.width(font, text))
+	}
+
+	private class Layout(val version: String, val x: Int, val text: String, val w: Int)
+
+	/**
+	 * Loaded changelog opens the in-client view; anything else (offline, slow, the
+	 * endpoint not carrying client entries yet) falls back to the website. API errors
+	 * must never take the title screen down with them.
+	 */
+	private fun openWhatsNew() {
+		if (ChangelogService.state == ChangelogService.State.LOADED && ChangelogService.entries.isNotEmpty()) {
+			minecraft!!.gui.setScreen(ChangelogScreen(this))
+		} else {
+			ChangelogService.openWebsiteChangelog(this)
+		}
 	}
 
 	// ── animation helpers (same voice as the menu shell) ─────────────────────────────────────
@@ -374,6 +438,7 @@ class ImperiumTitleScreen : TitleScreen(false) {
 			targets["circle$i"] = hit(x, circleY(), CIRCLE_D, CIRCLE_D)
 		}
 		targets["play"] = hit(playX(), playY(), PLAY_W, PLAY_H)
+		targets["whatsnew"] = hit(whatsNewX(), whatsNewY(), whatsNewW(), FOOTER_H + 4, mouseX, mouseY)
 		targets["options"] = hit(optionX(), rowY(), ROW_BTN_W, ROW_H)
 		targets["quit"] = hit(quitX(), rowY(), ROW_BTN_W, ROW_H)
 		for ((id, hovered) in targets) {
@@ -429,6 +494,9 @@ class ImperiumTitleScreen : TitleScreen(false) {
 		private const val ROW_H = 25
 		private const val ROW_BTN_W = 97
 		private const val FOOTER_H = 14
+
+		/** Gap the unread dot hangs in, left of the "What's new" label. */
+		private const val DOT_CLEARANCE = 7
 		private const val SERVER_ADDRESS = "play.romanica.net"
 		private const val SITE_URL = "https://romanica.net"
 		private const val STORE_URL = "https://romanica.net/store"

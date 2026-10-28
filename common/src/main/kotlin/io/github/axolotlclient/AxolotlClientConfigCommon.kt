@@ -489,6 +489,11 @@ abstract class AxolotlClientConfigCommon {
     @JvmField
     val noAltIcons = BooleanOption("no_alt_icons", false)
 
+    // Newest changelog entry (its id) the player has opened from the title screen's
+    // "What's new" entry; clears the unread dot. Internal state, never shown as a setting.
+    @JvmField
+    val changelogLastSeenId = StringOption("changelog.last_seen_id", "")
+
     @JvmField
     val config: OptionCategory = OptionCategory.create("config")
     @JvmField
@@ -625,7 +630,7 @@ abstract class AxolotlClientConfigCommon {
         performance.add(disableTntExpansion, optimizeSpawners, disableEnchantTableBooks)
         config.add(performance)
 
-        hidden.add(creditsBGM, someNiceBackground, noAltIcons)
+        hidden.add(creditsBGM, someNiceBackground, noAltIcons, changelogLastSeenId)
 
         AxoKeybinding.create(AxoKeys.KEY_UNKNOWN, "toggle_hide_chat").`br$registerOnConsumeClick`(Runnable {
             hideChat.toggle()

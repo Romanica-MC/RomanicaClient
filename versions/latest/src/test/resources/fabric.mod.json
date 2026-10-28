@@ -50,7 +50,8 @@
       "io.github.axolotlclient.TitlesGameTest",
       "io.github.axolotlclient.ImperiumChannelsGameTest",
       "io.github.axolotlclient.TranslationsParityGameTest",
-      "io.github.axolotlclient.ClientAuthGameTest"
+      "io.github.axolotlclient.ClientAuthGameTest",
+      "io.github.axolotlclient.ChangelogGameTest"
     ]
   },
   "depends": {
