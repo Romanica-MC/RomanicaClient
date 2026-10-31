@@ -1,3 +1,6 @@
+# DISABLED ON PURPOSE (owner 2026-10-30): GitHub Actions is permanently off for this org
+# (free-plan minutes exhausted; not paying). All checks run LOCALLY via scripts/local-check.sh
+# before every merge/deploy — never re-enable this workflow, never add or trigger one.
 name: CI
 
 on:
